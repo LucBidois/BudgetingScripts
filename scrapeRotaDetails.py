@@ -10,16 +10,6 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.chrome.options import Options
 
-
-    # URL = mySecrets.my_job_website_url
-    # # print(f"Key : {mySecrets.my_job_website_url}")
-    # page = requests.get(URL)
-
-    # soup = BeautifulSoup(page.content, "html.parser")
-    # results = soup.find(id="ResultsContainer")
-    # if results:
-    #     print(results.prettify())
-
 def main() -> None:
     driver = setUpforSelenium()
     
