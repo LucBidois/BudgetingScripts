@@ -30,6 +30,7 @@ def main() -> None:
     driver.switch_to.default_content()
     driver.switch_to.frame("main")
 
+    # I want to return a list of dates with, starttime and endtime - I want to next 4 weeks.
     scrapedRotaData = useBS4ToScrapeDataEachWeek(driver, driver.page_source)
 
     UpdateRotaSpreadsheet(scrapedRotaData)
@@ -93,9 +94,25 @@ def useBS4ToScrapeDataEachWeek(driver, page_source):
     print("Using BeautifulSoup to scrape data...")
     soup = BeautifulSoup(page_source, "html.parser")
     results = soup.find(id="pageControl_myrota")
-    print(results)
-    if results:
-        print(results.prettify())
+
+    for day in range(0,7):
+        date = 8 + day # TODO: Change to dynamic date, month, year
+        month = 9 
+        year = 2025
+
+        day_id = f'{date}-{month}-{year}-pamg{day}Contro{date}/{month}/{year}_0yrotam'
+
+        print(day_id)
+
+        # TODO: rethink variable names for readability improvement
+        day_div = soup.find('div', id=day_id).parent.children
+        day_div = [d for d in day_div if d.name == 'div'][1].children # This grabs all the div children in a list form
+        day_div = [d.get_text(strip=True) for d in day_div if d.name == 'div']
+
+        # TODO: filter out unwanted text from day_div
+
+        data.append(day_div)
+    return data
 
 
 def FillInputField(driver, element_name, input_value) -> None:
