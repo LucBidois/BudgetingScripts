@@ -11,6 +11,24 @@ from selenium.webdriver.chrome.options import Options
 import datetime
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+from enum import Enum
+
+from gspread import Spreadsheet
+
+class WeekDay(Enum):
+    MONDAY = 0 
+    TUESDAY = 1
+    WEDNESDAY = 2
+    THURSDAY = 3
+    FRIDAY = 4
+    SATURDAY = 5
+    SUNDAY = 6
+
+    def string(cls):
+        weekday = cls.name
+        capitalised_weekday = weekday[0:1] + weekday[1:].lower()
+        return str(capitalised_weekday)
+
 
 # TODO: pick camel or snake case - stop using both 
 # camelCase - functions 
@@ -38,31 +56,109 @@ def main() -> None:
     driver.switch_to.frame("main")
 
     scraped_rota_data = useBS4ToScrapeFutureShifts(driver)
-    scraped_past_rota_data = useBS4ToScrapePastShifts(driver, weeks=5)
+    # scraped_past_rota_data = useBS4ToScrapePastShifts(driver, weeks=5)
 
     print(scraped_rota_data)
-    print(scraped_past_rota_data)
+    # print(scraped_past_rota_data)
+
+
 
     if scraped_rota_data:
         UpdateRotaSpreadsheet(scraped_rota_data)
 
-    if scraped_past_rota_data:
-        UpdateEarningPredition(scraped_past_rota_data)
+    # if scraped_past_rota_data:
+    #     UpdateEarningPredition(scraped_past_rota_data)
 
-def setUpGoogleAPI():
+def setUpGoogleAPI() -> Spreadsheet:
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_name(mySecrets.google_account_creds_location, scope)
     client = gspread.authorize(creds)
-    sheet = client.open(mySecrets.google_sheet_name).sheet1
-    first_row = sheet.row_values(1)
-    print(first_row)
-    pass
+    return client.open(mySecrets.google_sheet_name).worksheet("Worked hours - day ")
+
+# first_cell_empty = True
+# row_num = 2 # first row has titles
+# while first_cell_empty: 
+#     first_cell = sheet.cell(row_num, 1).value
+    
+#     if first_cell != None:
+#         first_cell_empty = False
+#         break
+
+#     row_num += 1
+
+# print(f"first cell is {row_num}, with value {first_cell}")
+# first_column = sheet.col_values(1)
+# cell_value = sheet.cell(1, 1).value
+# sheet.update_cell(2, 2, "Hello, World!")
+# cell_list = sheet.range('A2:C2')
+# for cell in cell_list:
+#     cell.value = 'Updated'
+# sheet.update_cells(cell_list)
+# Insert a formula in a cell
+#  sheet.update_acell('D1', '=SUM(B2:B10)')   
+# last_filled_row = findLastDateWithScheduledShiftDataIndex(sheet)
+# sheet.insert_row(values = [], index=last_filled_row)
+
+# sheet.insert_rows(values=[[]], row=last_filled_row)
+# print(last_filled_row)
+
+# addPresetFunctionsToNewRow(sheet, last_filled_row)
+
+def rowValuesPreset(row_num, date, day_of_week, shift_start='', shift_end='', time_clocked_in='', time_clocked_out=''):
+    return [date, 
+            day_of_week, 
+            shift_start,
+            shift_end,
+            f'=IF(D{row_num}-C{row_num} = 0 , 0,TIMEVALUE(D{row_num}-C{row_num})*24)', # Hours scheduled
+            f'=IF(G{row_num}-F{row_num} = 0 , 0,TIMEVALUE(G{row_num}-F{row_num})*24)', # Hours worked
+            time_clocked_in, 
+            time_clocked_out,
+            f'=IF(C{row_num},IF(TIMEVALUE("06:00" - C{row_num})<0.25,TIMEVALUE("06:00" - C{row_num})*24,0),0)', # Night hours worked
+            f'=IF(F{row_num},IF(TIMEVALUE("06:00" - F{row_num})<0.25,TIMEVALUE("06:00" - F{row_num})*24,0),0)'] # Night hours scheduled
+
+
+def findLastDateWithScheduledShiftDataIndex(sheet) ->  int:
+    row = 2
+    not_found = True
+    while not_found:
+        first_cell = sheet.cell(row, 3).value
+        if first_cell:
+            return row
+        row += 1
+
+def addPresetFunctionsToNewRow(sheet, row_num):
+    sheet.update_acell(f'E{row_num}', f'=IF(D{row_num}-C{row_num} = 0 , 0,TIMEVALUE(D{row_num}-C{row_num})*24)')
+    sheet.update_acell(f'H{row_num}', f'=IF(G{row_num}-F{row_num} = 0 , 0,TIMEVALUE(G{row_num}-F{row_num})*24)')
+    sheet.update_acell(f'L{row_num}', f'=IF(C{row_num},IF(TIMEVALUE("06:00" - C{row_num})<0.25,TIMEVALUE("06:00" - C{row_num})*24,0),0)')
+    sheet.update_acell(f'I{row_num}', f'=IF(F{row_num},IF(TIMEVALUE("06:00" - F{row_num})<0.25,TIMEVALUE("06:00" - F{row_num})*24,0),0)')
+
 
 def UpdateEarningPredition(past_rota_data):
+    UpdateWorkedHours()
+    UpdatePayExpectations()
+
+def UpdateWorkedHours():
+    pass
+
+def UpdatePayExpectations():
     pass
 
 def UpdateRotaSpreadsheet(scraped_rota_data):
-    pass 
+
+    for index in scraped_rota_data:
+        scraped_rota_data.keys(index).strftime("%d/%m/%y")
+        week_day = WeekDay(scraped_rota_data.keys(index).weekday()).string()
+        start_time = scraped_rota_data.values(index)['start_time']
+        end_time = scraped_rota_data.values(index)['end_time']
+        # TODO: match the date with the row number we need to add.
+    
+    rowValuesPreset(row_num, scraped_rota_data.keys(index).strftime("%d/%m/%y"), week_day, start_time, end_time)
+
+    sheet = setUpGoogleAPI()
+    for data_line in scraped_rota_data:
+        # prepare row, 
+        # insert row
+        pass
 
 def navigateToRotaPage(driver) -> bool:
     try: 
@@ -191,6 +287,10 @@ def FillInputField(driver, element_name, input_value) -> None:
     field_input.send_keys(Keys.RETURN) 
 
 if __name__ == "__main__":
-    # main()
-    setUpGoogleAPI()
+    main()
+    # setUpGoogleAPI()
+
+    # week_day = datetime.datetime.today().weekday()
+    # print(WeekDay(week_day).string())
+
     pause = input("Press Enter to continue...") # Pause the script to allow user to see the browser for testing purposes
