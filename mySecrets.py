@@ -14,3 +14,6 @@ my_bank_email = os.getenv("my_bank_email")
 my_bank_userid = os.getenv("my_bank_userid")
 my_bank_password = os.getenv("my_bank_password")
 my_bank_memorable_information = os.getenv("my_bank_memorable_information")
+
+google_sheet_name = os.getenv("google_sheet_name")
+google_account_creds_location = os.getenv("google_account_creds_location")

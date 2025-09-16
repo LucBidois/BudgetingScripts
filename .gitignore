@@ -147,6 +147,9 @@ venv.bak/
 # Environment variables files
 *.env
 
+# google creds 
+budgetandpaylipautomations-0f280875d886.json
+
 # Spyder project settings
 .spyderproject
 .spyproject

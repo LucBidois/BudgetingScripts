@@ -9,6 +9,8 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.chrome.options import Options
 import datetime
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
 # TODO: pick camel or snake case - stop using both 
 # camelCase - functions 
@@ -46,6 +48,15 @@ def main() -> None:
 
     if scraped_past_rota_data:
         UpdateEarningPredition(scraped_past_rota_data)
+
+def setUpGoogleAPI():
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_name(mySecrets.google_account_creds_location, scope)
+    client = gspread.authorize(creds)
+    sheet = client.open(mySecrets.google_sheet_name).sheet1
+    first_row = sheet.row_values(1)
+    print(first_row)
+    pass
 
 def UpdateEarningPredition(past_rota_data):
     pass
@@ -180,5 +191,6 @@ def FillInputField(driver, element_name, input_value) -> None:
     field_input.send_keys(Keys.RETURN) 
 
 if __name__ == "__main__":
-    main()
+    # main()
+    setUpGoogleAPI()
     pause = input("Press Enter to continue...") # Pause the script to allow user to see the browser for testing purposes
