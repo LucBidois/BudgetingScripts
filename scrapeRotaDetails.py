@@ -3,17 +3,14 @@ from bs4 import BeautifulSoup
 import mySecrets
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import Select, WebDriverWait
+from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.action_chains import ActionChains
-from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.chrome.options import Options
 import datetime
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from enum import Enum
 from gspread.utils import ValueInputOption
-
 from gspread import Spreadsheet
 
 class WeekDay(Enum):
@@ -30,15 +27,32 @@ class WeekDay(Enum):
         capitalised_weekday = weekday[0:1] + weekday[1:].lower()
         return str(capitalised_weekday)
 
+class XPaths(Enum): 
+    my_rota_last_week_btn = "/html/body/div[3]/div[1]/div[2]/div[4]/div[7]/div/div/div[2]/div/div/div/div[2]/div[1]/button[1]"
+    my_rota_next_week_btn = "/html/body/div[3]/div[1]/div[2]/div[4]/div[7]/div/div/div[2]/div/div/div/div[2]/div[1]/button[2]"
+    search_result_my_rota = "//*[@id='searchResults']/div[1]/div/div/div/div"
 
-# TODO: pick camel or snake case - stop using both 
-# camelCase - functions 
-# PascalCase - Clases
-# snake_case - variables 
+class SpreadSheetEquations(Enum):
+
+    @classmethod
+    def hoursScheduled(cls, row_num):
+            return f'=IF(D{row_num}-C{row_num} = 0 , 0,TIMEVALUE(D{row_num}-C{row_num})*24)'
+    
+    @classmethod
+    def hoursWorked(cls, row_num):
+            return f'=IF(G{row_num}-F{row_num} = 0 , 0,TIMEVALUE(G{row_num}-F{row_num})*24)'
+    
+    @classmethod
+    def nightHoursWorked(cls, row_num):
+            return f'=IF(C{row_num},IF(TIMEVALUE("06:00" - C{row_num})<0.25,TIMEVALUE("06:00" - C{row_num})*24,0),0)'
+    
+    @classmethod
+    def nightHoursScheduled(cls, row_num):
+            return f'=IF(F{row_num},IF(TIMEVALUE("06:00" - F{row_num})<0.25,TIMEVALUE("06:00" - F{row_num})*24,0),0)'
+    
 
 def main() -> None:
     driver = setUpforSelenium()
-    
     successful_login = logIntoWebsite(driver)
 
     if not successful_login:
@@ -57,18 +71,17 @@ def main() -> None:
     driver.switch_to.frame("main")
 
     scraped_rota_data = useBS4ToScrapeFutureShifts(driver)
+    navigate_back_to_this_week(driver)
     # scraped_past_rota_data = useBS4ToScrapePastShifts(driver, weeks=5)
-
-    # print(scraped_rota_data)
     # print(scraped_past_rota_data)
 
     sheet = setUpGoogleAPI()
 
     if scraped_rota_data:
         UpdateRotaSpreadsheet(sheet, scraped_rota_data)
-
     # if scraped_past_rota_data:
     #     UpdateEarningPredition(scraped_past_rota_data)
+    driver.quit()
 
 def setUpGoogleAPI() -> Spreadsheet:
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -76,52 +89,23 @@ def setUpGoogleAPI() -> Spreadsheet:
     client = gspread.authorize(creds)
     return client.open(mySecrets.google_sheet_name).worksheet("Worked hours - day ")
 
-# first_cell_empty = True
-# row_num = 2 # first row has titles
-# while first_cell_empty: 
-#     first_cell = sheet.cell(row_num, 1).value
-    
-#     if first_cell != None:
-#         first_cell_empty = False
-#         break
-
-#     row_num += 1
-
-# print(f"first cell is {row_num}, with value {first_cell}")
-# first_column = sheet.col_values(1)
-# cell_value = sheet.cell(1, 1).value
-# sheet.update_cell(2, 2, "Hello, World!")
-# cell_list = sheet.range('A2:C2')
-# for cell in cell_list:
-#     cell.value = 'Updated'
-# sheet.update_cells(cell_list)
-# Insert a formula in a cell
-#  sheet.update_acell('D1', '=SUM(B2:B10)')   
-# last_filled_row = findLastDateWithScheduledShiftDataIndex(sheet)
-# sheet.insert_row(values = [], index=last_filled_row)
-
-# sheet.insert_rows(values=[[]], row=last_filled_row)
-# print(last_filled_row)
-
-# addPresetFunctionsToNewRow(sheet, last_filled_row)
-
 def rowValuesPreset(row_num: int, date: str, day_of_week: str, shift_start: str='', 
                     shift_end: str='', time_clocked_in: str='', time_clocked_out: str='') -> list[10]:
     return [date, 
             day_of_week, 
             shift_start,
             shift_end,
-            f'=IF(D{row_num}-C{row_num} = 0 , 0,TIMEVALUE(D{row_num}-C{row_num})*24)', # Hours scheduled
+            SpreadSheetEquations.hoursScheduled(row_num),
             time_clocked_in, 
             time_clocked_out,
-            f'=IF(G{row_num}-F{row_num} = 0 , 0,TIMEVALUE(G{row_num}-F{row_num})*24)', # Hours worked
-            f'=IF(C{row_num},IF(TIMEVALUE("06:00" - C{row_num})<0.25,TIMEVALUE("06:00" - C{row_num})*24,0),0)', # Night hours worked
-            '', # Holifay 
+            SpreadSheetEquations.hoursWorked(row_num),
+            SpreadSheetEquations.hoursScheduled(row_num),
+            '', # Holiday 
             '', # day off
-            f'=IF(F{row_num},IF(TIMEVALUE("06:00" - F{row_num})<0.25,TIMEVALUE("06:00" - F{row_num})*24,0),0)'] # Night hours scheduled
+            SpreadSheetEquations.nightHoursScheduled]
 
 
-def findLastDateWithScheduledShiftDataIndex(sheet, start_row: int = 2) ->  int:
+def findLastDateWithScheduledShiftDataIndex(sheet: Spreadsheet, start_row: int = 2) ->  int:
     row = start_row
     not_found = True
     while not_found:
@@ -131,7 +115,7 @@ def findLastDateWithScheduledShiftDataIndex(sheet, start_row: int = 2) ->  int:
         row += 1
     print("Row not found")
 
-def findDateRowIndex(sheet, start_row: int = 2, date: str=datetime.datetime.today().strftime("%d/%m/%y"), maxRowCheck: int = 50):
+def findDateRowIndex(sheet: Spreadsheet, start_row: int = 2, date: str=datetime.datetime.today().strftime("%d/%m/%y"), maxRowCheck: int = 50):
     row = start_row
 
     cell_list = sheet.range(f'A{start_row}:A{maxRowCheck}')
@@ -143,7 +127,7 @@ def findDateRowIndex(sheet, start_row: int = 2, date: str=datetime.datetime.toda
     print("Row not found")
     return False, None
 
-def addPresetFunctionsToNewRow(sheet, row_num: int) -> None:
+def addPresetFunctionsToNewRow(sheet: Spreadsheet, row_num: int) -> None:
     sheet.update_acell(f'E{row_num}', f'=IF(D{row_num}-C{row_num} = 0 , 0,TIMEVALUE(D{row_num}-C{row_num})*24)')
     sheet.update_acell(f'H{row_num}', f'=IF(G{row_num}-F{row_num} = 0 , 0,TIMEVALUE(G{row_num}-F{row_num})*24)')
     sheet.update_acell(f'L{row_num}', f'=IF(C{row_num},IF(TIMEVALUE("06:00" - C{row_num})<0.25,TIMEVALUE("06:00" - C{row_num})*24,0),0)')
@@ -160,7 +144,7 @@ def UpdateWorkedHours():
 def UpdatePayExpectations():
     pass
 
-def UpdateRotaSpreadsheet(sheet, scraped_rota_data):
+def UpdateRotaSpreadsheet(sheet: Spreadsheet, scraped_rota_data):
 
     for week_index in scraped_rota_data:
         for day_index in scraped_rota_data[week_index]:
@@ -195,7 +179,7 @@ def UpdateRotaSpreadsheet(sheet, scraped_rota_data):
     
     # date + 1 - search for values in list, - add values to row, append to sheet 
 
-def editRow(sheet, row_values, row_num, date):
+def editRow(sheet: Spreadsheet, row_values, row_num, date):
     cell_list = sheet.range(f'A{row_num}:L{row_num}')
     i = 0
     for cell in cell_list:
@@ -204,7 +188,7 @@ def editRow(sheet, row_values, row_num, date):
     sheet.update_cells(cell_list, value_input_option = ValueInputOption.user_entered)
     print(f"edit existting date: {date}")
 
-def addRow(sheet, row_values, row_num, date):
+def addRow(sheet: Spreadsheet, row_values, row_num, date):
     print(row_values)
     sheet.insert_row(row_values, row_num, value_input_option = ValueInputOption.user_entered) # TODO: Not working
     print(f"add new row for date: {date}")
@@ -287,16 +271,19 @@ def scrapeRotaForTheWeek(page_source, week_start_date):
 
     return results
 
+def generateDivId(day: int, month: int, year: int, week_day: int) -> str:
+    return f'{day}-{month}-{year}-pamg{week_day}Contro{day}/{month}/{year}_0yrotam'
+
 def useBS4ToScrapePastShifts(driver, weeks=5):
     data = {}
-    # look at 4 weeks in advance - 4th week is usually blank
+
     for week in range(weeks):
         
-        driver.find_element(By.XPATH, "/html/body/div[3]/div[1]/div[2]/div[4]/div[7]/div/div/div[2]/div/div/div/div[2]/div[1]/button[1]").click()
+        driver.find_element(By.XPATH, XPaths.my_rota_last_week_btn).click()
         time.sleep(2) # wait for page to load
 
         today = datetime.date.today()
-        week_start_date = today - datetime.timedelta(days=-today.weekday(), weeks=week)
+        week_start_date = today - datetime.timedelta(days=-today.weekday(), weeks=week) # TODO: this does not work
         print(f"Scraping week starting: {week_start_date}")
 
         results = scrapeRotaForTheWeek(driver.page_source, week_start_date)
@@ -304,13 +291,31 @@ def useBS4ToScrapePastShifts(driver, weeks=5):
     
     return data
 
-def useBS4ToScrapeFutureShifts(driver):
+def navigate_back_to_this_week(driver) -> None:
+    try: 
+        driver.find_element(By.XPATH, XPaths.my_rota_last_week_btn).click()
+        time.sleep(1)
+        driver.find_element(By.XPATH, XPaths.my_rota_last_week_btn).click()
+        time.sleep(1)
+        driver.find_element(By.XPATH, XPaths.my_rota_last_week_btn).click()
+        time.sleep(1)
+    except:
+        failed_return = True
+        print("error navigating back")
+
+    if failed_return:
+        try:
+            driver.find_element(By.XPATH, XPaths.search_result_my_rota).click()
+        except:
+            print("error refreshing page")
+
+def useBS4ToScrapeFutureShifts(driver) -> dict[int, dict[int, list]]:
     data = {}
 
     # look at 4 weeks in advance - 4th week is usually blank
     for week in range(4):
         if week != 0:
-            driver.find_element(By.XPATH, "/html/body/div[3]/div[1]/div[2]/div[4]/div[7]/div/div/div[2]/div/div/div/div[2]/div[1]/button[2]").click()
+            driver.find_element(By.XPATH, XPaths.my_rota_next_week_btn).click()
             time.sleep(2) # wait for page to load
 
         today = datetime.date.today()
@@ -319,17 +324,6 @@ def useBS4ToScrapeFutureShifts(driver):
 
         results = scrapeRotaForTheWeek(driver.page_source, week_start_date)
         data[week] = results
-    
-    # navigate back to this week. 
-    # try: 
-    #     driver.find_element(By.XPATH, "/html/body/div[3]/div[1]/div[2]/div[4]/div[7]/div/div/div[2]/div/div/div/div[2]/div[1]/button[1]").click()
-    #     time.sleep(1)
-    #     driver.find_element(By.XPATH, "/html/body/div[3]/div[1]/div[2]/div[4]/div[7]/div/div/div[2]/div/div/div/div[2]/div[1]/button[1]").click()
-    #     time.sleep(1)
-    #     driver.find_element(By.XPATH, "/html/body/div[3]/div[1]/div[2]/div[4]/div[7]/div/div/div[2]/div/div/div/div[2]/div[1]/button[1]").click()
-    #     time.sleep(1)
-    # except:
-    #     print("error navigating back")
     
     return data
 
@@ -342,16 +336,4 @@ def FillInputField(driver, element_name, input_value) -> None:
 
 if __name__ == "__main__":
     main()
-    # setUpGoogleAPI()
-
-    # sheet = setUpGoogleAPI()
-    # row = 2
-    # print((sheet.cell(31, 1).value == datetime.datetime.today().strftime("%d/%m/%y")))
-
-    # cell_list = sheet.range(f'A2:A50')
-    # for cell in cell_list:
-    #     if cell.value == datetime.datetime.today().strftime("%d/%m/%y"):
-    #         print(row)
-    #     row = row + 1
-    # print("out of loop")
     pause = input("Press Enter to continue...") # Pause the script to allow user to see the browser for testing purposes
