@@ -1,17 +1,19 @@
 import time
+import datetime
+from enum import Enum
 from bs4 import BeautifulSoup
-import mySecrets
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
-import datetime
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from enum import Enum
 from gspread.utils import ValueInputOption
 from gspread import Spreadsheet
+
+from googleSheet import GoogleSpreadSheetUtils, PaySlipSheetUtils
+import mySecrets
 
 class WeekDay(Enum):
     MONDAY = 0 
@@ -38,20 +40,20 @@ class SpreadSheetEquations(Enum):
 
     @classmethod
     def hoursScheduled(cls, row_num: int) -> str:
-            return f'=IF(D{row_num}-C{row_num} = 0 , 0,TIMEVALUE(D{row_num}-C{row_num})*24)'
-    
+        return f'=IF(D{row_num}-C{row_num} = 0 , 0,TIMEVALUE(D{row_num}-C{row_num})*24)'
+
     @classmethod
     def hoursWorked(cls, row_num: int) -> str:
-            return f'=IF(G{row_num}-F{row_num} = 0 , 0,TIMEVALUE(G{row_num}-F{row_num})*24)'
+        return f'=IF(G{row_num}-F{row_num} = 0 , 0,TIMEVALUE(G{row_num}-F{row_num})*24)'
     
     @classmethod
     def nightHoursWorked(cls, row_num: int) -> str:
-            return f'=IF(F{row_num},IF(TIMEVALUE("06:00" - F{row_num})<0.25,TIMEVALUE("06:00" - F{row_num})*24,0),0)'
+        return f'=IF(F{row_num},IF(TIMEVALUE("06:00" - F{row_num})<0.25,TIMEVALUE("06:00" - F{row_num})*24,0),0)'
     
     @classmethod
     def nightHoursScheduled(cls, row_num: int) -> str:
-            return f'=IF(C{row_num},IF(TIMEVALUE("06:00" - C{row_num})<0.25,TIMEVALUE("06:00" - C{row_num})*24,0),0)'
-    
+        return f'=IF(C{row_num},IF(TIMEVALUE("06:00" - C{row_num})<0.25,TIMEVALUE("06:00" - C{row_num})*24,0),0)'
+ 
 
 def main() -> None:
     driver = setUpforSelenium()
@@ -61,14 +63,14 @@ def main() -> None:
         print("Login failed, exiting script.")
         driver.quit()
         return
-    
+
     successful_navigation = navigateToRotaPage(driver)
 
     if not successful_navigation:
         print("Navigation to rota page failed, exiting script.")
         driver.quit()
         return
-    
+
     driver.switch_to.default_content()
     driver.switch_to.frame("main")
 
@@ -77,13 +79,29 @@ def main() -> None:
     scrape_past_weeks_num = 5
     scraped_past_rota_data = useBS4ToScrapePastShifts(driver, weeks=scrape_past_weeks_num)
 
-    sheet = setUpGoogleAPI()
+    aldi_utils = PaySlipSheetUtils()
+
+    #TODO: These names are awful
+    worksheet, sheet = aldi_utils.getWorksheet()
+    sheet_values, edit_range = aldi_utils.prepareUpdateWorkedHours(worksheet, scraped_past_rota_data, scrape_past_weeks_num)
+    print(sheet_values)
+    print(scraped_past_rota_data)
+    aldi_utils.updateWorksheet(sheet, sheet_values, edit_range) # TODO: investigate why no update is happening 
+
+    # g_utils = GoogleSpreadSheetUtils()
+
+    
+    # # worksheet = aldi_utils.getWorksheet(g_utils)
+    # aldi_utils.UpdateWorkedHours(worksheet, scraped_past_rota_data, scrape_past_weeks_num, sheet)
+
+    # aldi_utils.updateWorksheet(g_utils)
+
 
     # if scraped_rota_data:
     #     UpdateRotaSpreadsheet(sheet, scraped_rota_data)
-    print(scraped_past_rota_data)
-    if scraped_past_rota_data:
-        UpdateWorkedHours(sheet, scraped_past_rota_data, weeks_scraped=scrape_past_weeks_num)
+    # print(scraped_past_rota_data)
+    # if scraped_past_rota_data:
+        # UpdateWorkedHours(sheet, scraped_past_rota_data, weeks_scraped=scrape_past_weeks_num)
     driver.quit()
 
 def setUpGoogleAPI() -> Spreadsheet:
@@ -92,18 +110,19 @@ def setUpGoogleAPI() -> Spreadsheet:
     client = gspread.authorize(creds)
     return client.open(mySecrets.google_sheet_name).worksheet("Worked hours - day ")
 
-def rowValuesPreset(row_num: int, date: str, day_of_week: str, shift_start: str='', 
-                    shift_end: str='', time_clocked_in: str='', time_clocked_out: str='', holiday: str='') -> list[str]:
-    return [date, 
-            day_of_week, 
+def rowValuesPreset(row_num: int, date: str, day_of_week: str, shift_start: str='',
+                    shift_end: str='', time_clocked_in: str='', time_clocked_out: str='',
+                    holiday: str='') -> list[str]:
+    return [date,
+            day_of_week,
             shift_start,
             shift_end,
             SpreadSheetEquations.hoursScheduled(row_num),
-            time_clocked_in, 
+            time_clocked_in,
             time_clocked_out,
             SpreadSheetEquations.hoursWorked(row_num),
             SpreadSheetEquations.nightHoursWorked(row_num),
-            holiday, # Holiday 
+            holiday, # Holiday
             '', # day off
             SpreadSheetEquations.nightHoursScheduled(row_num)]
 
@@ -117,10 +136,10 @@ def findLastDateWithScheduledShiftDataIndex(sheet: Spreadsheet, start_row: int =
         row += 1
     print("Row not found")
 
-def findDateRowIndex(sheet: Spreadsheet, start_row: int = 2, date: str=datetime.datetime.today().strftime("%d/%m/%y"), maxRowCheck: int = 150):
+def findDateRowIndex(sheet: Spreadsheet, start_row: int = 2, date: str=datetime.datetime.today().strftime("%d/%m/%y"), max_row_check: int = 150):
     row = start_row
 
-    cell_list = sheet.range(f'A{start_row}:A{maxRowCheck}')
+    cell_list = sheet.range(f'A{start_row}:A{max_row_check}')
     for cell in cell_list:
         if cell.value == date:
             return True, row
@@ -133,7 +152,7 @@ def UpdateWorkedHours(sheet: Spreadsheet, scraped_rota_data: dict[int, dict[int,
     for week_index in range(weeks_scraped)[::-1]:
     # for week_index in scraped_rota_data:
         for day_index in scraped_rota_data[week_index]:
-            
+
             first_date_row_found = False
 
             date_str = scraped_rota_data[week_index][day_index]['date'].strftime("%d/%m/%y")
@@ -146,7 +165,7 @@ def UpdateWorkedHours(sheet: Spreadsheet, scraped_rota_data: dict[int, dict[int,
             if not (datetime.datetime.strptime(date_str, "%d/%m/%y").date() < datetime.date.today()):
                 print(f'date: {date_str} is from the future, skipping')
                 continue
-            
+
             if not first_date_row_found:
                 date_exists, row_num = findDateRowIndex(sheet, date=date_str)
                 first_date_row_found = True
@@ -203,11 +222,11 @@ def editRow(sheet: Spreadsheet, row_values, row_num, date, edit_schedule: bool =
     print(f"edit existting date: {date}")
 
 def setCellValues(cell_list, row_values):
-        i=0
-        for cell in cell_list:
-            cell.value = row_values[i]
-            i += 1
-        return cell_list
+    i=0
+    for cell in cell_list:
+        cell.value = row_values[i]
+        i += 1
+    return cell_list
 
 def addRow(sheet: Spreadsheet, row_values, row_num, date):
     # print(row_values)
@@ -230,7 +249,7 @@ def navigateToRotaPage(driver: webdriver.Chrome) -> bool:
         time.sleep(5) # wait for search results to load
         driver.find_element(By.XPATH, XPaths.search_result_my_rota.value).click()
         time.sleep(5) # wait for rota page to load
-    except:
+    except Exception:
         return False
 
     return True
@@ -281,7 +300,7 @@ def scrapeRotaForTheWeek(page_source, week_start_date) -> dict[int, dict]:
             start_time = day_div[0][start_time_index:start_time_index+5]
             end_time_index = day_div[-1].find(":") - 2
             end_time = day_div[-1][end_time_index+6:end_time_index+11]
-        
+
         if day_div and day_div[0][0:7] == "Holiday":
             holiday = '1' # magic values match spreadsheet
         else:
@@ -313,8 +332,7 @@ def useBS4ToScrapePastShifts(driver: webdriver.Chrome, weeks: int=5) -> dict[int
         print(f"Scraping week starting: {week_start_date}") # scraping week ending?? 
 
         results = scrapeRotaForTheWeek(driver.page_source, week_start_date)
-        data[week] = results # NOTE: week index is in reverse order
-    
+        data[week] = results
     return data
 
 def navigate_back_to_this_week(driver: webdriver.Chrome) -> None:
@@ -326,14 +344,14 @@ def navigate_back_to_this_week(driver: webdriver.Chrome) -> None:
         driver.find_element(By.XPATH, XPaths.my_rota_last_week_btn.value).click()
         time.sleep(1)
         return
-    except:
+    except Exception:
         failed_return = True
         print("error navigating back")
 
     if failed_return:
         try:
             driver.find_element(By.XPATH, XPaths.search_result_my_rota.value).click()
-        except:
+        except Exception:
             print("error refreshing page")
 
 def useBS4ToScrapeFutureShifts(driver: webdriver.Chrome, check_weeks : int = 4) -> dict[int, dict[int, list]]:
