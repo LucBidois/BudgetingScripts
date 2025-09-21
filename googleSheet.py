@@ -1,5 +1,5 @@
 """
-EDITING "Worked hours - day" page
+EDITING mySecrets.google_income_page_2_name page
 
 Use a 2D array as an input to edit a matching area of the spreadsheet. 
 - match the row that we start on and the row that we end on, knowing where we also need to add new rows. 
@@ -11,12 +11,12 @@ Use a 2D array as an input to edit a matching area of the spreadsheet.
 """
 EDITING "Payday expectations"
 
-- input comes from "Worked hours - day" 
+- input comes from mySecrets.google_income_page_2_name 
 - one call request taking only the rows for the months we want to look at
 - one call for the current state of this sheet
 - Make all the edits that I nee
     - Need to get info from the payslips page (only need to update once a month)
-    - prepare all functions and formulas that pull from "Worked hours - day" 
+    - prepare all functions and formulas that pull from mySecrets.google_income_page_2_name
 """
 
 import datetime
@@ -69,10 +69,53 @@ class PaySlipSheetUtils():
     """
     Class holding methods and attributs only used by my pay and rota tracking spreadsheet
     """
-    def getWorksheet(self, page_name: str = "Worked hours - day ", range: str = "A1:L") -> list[list]:
+    def getWorksheet(self, worksheet_name: str = mySecrets.google_income_worksheet_name, page_name:  str = mySecrets.google_income_page_2_name, range: str = "A1:L") -> {list[list], Spreadsheet.worksheet}:
         g_utils = GoogleSpreadSheetUtils()
-        sheet = g_utils.setUpGoogleAPI(mySecrets.google_sheet_name, page_name)
+        sheet = g_utils.setUpGoogleAPI(worksheet_name, page_name)
         return g_utils.readSpreadsheet(sheet, range), sheet
+
+    def prepareUpdateScheduledHours(self, worksheet:list, scraped_scheduled_data: dict[int, dict[int, dict[str, str]]]):
+        sheet_values_A_to_E = []
+        sheet_values_H_to_L = []
+        sheet_values_new_rows = []
+        new_row = 0
+        # first_date_row_found = False
+        first_row = 0
+
+        for week_index in scraped_scheduled_data:
+            for day_index in scraped_scheduled_data[week_index]:
+            
+                date_str = scraped_scheduled_data[week_index][day_index]['date'].strftime("%d/%m/%y")
+                week_day = scraped_scheduled_data[week_index][day_index]['day']
+                start_time = scraped_scheduled_data[week_index][day_index]['start_time']
+                end_time = scraped_scheduled_data[week_index][day_index]['end_time']
+                holiday = scraped_scheduled_data[week_index][day_index]['holiday']
+
+                # only update future dates
+                if datetime.date.today() > datetime.datetime.strptime(date_str, "%d/%m/%y").date():
+                    print(f"skipping {date_str} as it is in the past.")
+                    continue
+                
+                date_exists, row_num = self.findDateRowIndex(worksheet, date=date_str)
+
+                if row_num:
+                    last_editable_row = row_num + 1
+
+                if not first_row:
+                    first_row = row_num + 1
+
+                if date_exists and row_num:
+                    sheet_values_A_to_E.append(self.rowValues(row_num + 1, date_str, week_day, shift_start=start_time, shift_end=end_time, holiday=holiday)[0:5]) 
+                    sheet_values_H_to_L.append(self.rowValues(row_num + 1, date_str, week_day, shift_start=start_time, shift_end=end_time, holiday=holiday)[7:12])
+                else:
+                    if not new_row:
+                        new_row = row_num
+                    else:
+                        new_row += 1
+                    sheet_values_new_rows.append(self.rowValues(new_row, date_str, week_day, shift_start=start_time, shift_end=end_time, holiday=holiday))
+
+
+        return sheet_values_A_to_E[::-1], sheet_values_H_to_L[::-1], sheet_values_new_rows[::-1], first_row, last_editable_row
 
     def prepareUpdateWorkedHours(self, worksheet: list, scraped_rota_data: dict[int, dict[int,dict[str, str]]], weeks_scraped: int):
         sheet_values = []
@@ -99,10 +142,10 @@ class PaySlipSheetUtils():
                     row_num -= 1
                 
                 if date_exists and row_num:
-                    sheet_values.append(self.rowValues(row_num, date_str, week_day, time_clocked_in=start_time, time_clocked_out=end_time, holiday=holiday)[5:12])
+                    sheet_values.append(self.rowValues(row_num + 1, date_str, week_day, time_clocked_in=start_time, time_clocked_out=end_time, holiday=holiday)[5:12])
 
         if date_exists and row_num:
-            edit_range = f'F{row_num}:L{first_row}'
+            edit_range = f'F{row_num + 1}:L{first_row + 1}'
             return sheet_values[::-1], edit_range
             # sheet.update(sheet_values, edit_range, value_input_option = ValueInputOption.user_entered )
 
@@ -132,7 +175,7 @@ class PaySlipSheetUtils():
             if worksheet[row][0] == date:
                 return True, row
 
-        print("Row not found")
+        print(f"Row not found for date {date}")
         return False, None
 
     def editRow(self, sheet: Spreadsheet, row_values, row_num, date, edit_schedule: bool = False, edit_clock_in: bool = False) -> None:
@@ -157,6 +200,23 @@ class PaySlipSheetUtils():
             cell.value = row_values[i]
             i += 1
         return cell_list
+    
+    def test(self):
+
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_name(mySecrets.google_account_creds_location, scope)
+        client = gspread.authorize(creds)
+        sheet = client.open(mySecrets.google_income_worksheet_name)
+        worksheet = sheet.worksheet(mySecrets.google_income_page_2_name)
+
+        # worksheet_values, sheet = self.getWorksheet(mySecrets.google_income_worksheet_name, mySecrets.google_income_page_2_name)
+        print(sheet)
+        values = [['testing', '', '', '', '', '', '', '', '', '', 'testing2'], ['testing3', '', '', '', '', '', 'hello', '', '', '', 'testing4']]
+        # sheet.batch_update()
+        # sheet.values_append(range = 'Worked hours - day!A6:L6', params = {'valueInputOption': 'USER_ENTERED', 'insertDataOption' : 'INSERT_ROWS'}, body = {'values': values}) # this has updated at the bottom...
+        # worksheet.append_rows() # this will also only add rows at the end of the table. 
+        # worksheet.insert_cols(values= values, col = 6, value_input_option= ValueInputOption.user_entered)
+        worksheet.insert_rows(values= values, row = 6, value_input_option= ValueInputOption.user_entered)
 
 
 class BudgetingSheetUtils():
@@ -171,4 +231,6 @@ class BudgetingSheetUtils():
     """
 
 if __name__ == "__main__":
+    # payslip = PaySlipSheetUtils()
+    # payslip.test()
     pass

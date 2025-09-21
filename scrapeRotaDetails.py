@@ -74,41 +74,31 @@ def main() -> None:
     driver.switch_to.default_content()
     driver.switch_to.frame("main")
 
-    # scraped_rota_data = useBS4ToScrapeFutureShifts(driver)
-    # navigate_back_to_this_week(driver)
+    scraped_scheduled_rota_data = useBS4ToScrapeFutureShifts(driver)
+    navigate_back_to_this_week(driver)
     scrape_past_weeks_num = 5
     scraped_past_rota_data = useBS4ToScrapePastShifts(driver, weeks=scrape_past_weeks_num)
 
     aldi_utils = PaySlipSheetUtils()
 
     #TODO: These names are awful
-    worksheet, sheet = aldi_utils.getWorksheet()
-    sheet_values, edit_range = aldi_utils.prepareUpdateWorkedHours(worksheet, scraped_past_rota_data, scrape_past_weeks_num)
-    print(sheet_values)
-    print(scraped_past_rota_data)
-    aldi_utils.updateWorksheet(sheet, sheet_values, edit_range) # TODO: investigate why no update is happening 
+    worksheetList, sheet = aldi_utils.getWorksheet()
+    sheet_values_future_A_E, sheet_values_future_H_L, sheet_values_future_append, last_row, first_row  = aldi_utils.prepareUpdateScheduledHours(worksheetList, scraped_scheduled_rota_data)
+    aldi_utils.updateWorksheet(sheet, sheet_values_future_A_E, f"A{first_row}:E{last_row}")
+    aldi_utils.updateWorksheet(sheet, sheet_values_future_H_L, f"H{first_row}:L{last_row}") # I may remove this section as it should be appended when inserting rows.
 
-    # g_utils = GoogleSpreadSheetUtils()
+    sheet.insert_rows(values= sheet_values_future_append, row = first_row, value_input_option= ValueInputOption.user_entered)
 
-    
-    # # worksheet = aldi_utils.getWorksheet(g_utils)
-    # aldi_utils.UpdateWorkedHours(worksheet, scraped_past_rota_data, scrape_past_weeks_num, sheet)
+    sheet_values_past, edit_range_past = aldi_utils.prepareUpdateWorkedHours(worksheetList, scraped_past_rota_data, scrape_past_weeks_num)
+    aldi_utils.updateWorksheet(sheet, sheet_values_past, edit_range_past)
 
-    # aldi_utils.updateWorksheet(g_utils)
-
-
-    # if scraped_rota_data:
-    #     UpdateRotaSpreadsheet(sheet, scraped_rota_data)
-    # print(scraped_past_rota_data)
-    # if scraped_past_rota_data:
-        # UpdateWorkedHours(sheet, scraped_past_rota_data, weeks_scraped=scrape_past_weeks_num)
     driver.quit()
 
 def setUpGoogleAPI() -> Spreadsheet:
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_name(mySecrets.google_account_creds_location, scope)
     client = gspread.authorize(creds)
-    return client.open(mySecrets.google_sheet_name).worksheet("Worked hours - day ")
+    return client.open(mySecrets.google_income_worksheet_name).worksheet("Worked hours - day ")
 
 def rowValuesPreset(row_num: int, date: str, day_of_week: str, shift_start: str='',
                     shift_end: str='', time_clocked_in: str='', time_clocked_out: str='',
