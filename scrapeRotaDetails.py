@@ -10,9 +10,9 @@ from selenium.webdriver.chrome.options import Options
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from gspread.utils import ValueInputOption
-from gspread import Spreadsheet
+from gspread import Worksheet
 
-from googleSheet import GoogleSpreadSheetUtils, PaySlipSheetUtils
+from googleSheet import PaySlipSheetUtils
 import mySecrets
 
 class WeekDay(Enum):
@@ -56,6 +56,7 @@ class SpreadSheetEquations(Enum):
  
 
 def main() -> None:
+
     driver = setUpforSelenium()
     successful_login = logIntoWebsite(driver)
 
@@ -79,22 +80,23 @@ def main() -> None:
     scrape_past_weeks_num = 5
     scraped_past_rota_data = useBS4ToScrapePastShifts(driver, weeks=scrape_past_weeks_num)
 
-    aldi_utils = PaySlipSheetUtils()
+    payslip_utils = PaySlipSheetUtils()
+    worksheet_data, worksheet_class = payslip_utils.getWorksheet()
 
-    #TODO: These names are awful
-    worksheetList, sheet = aldi_utils.getWorksheet()
-    sheet_values_future_A_E, sheet_values_future_H_L, sheet_values_future_append, last_row, first_row  = aldi_utils.prepareUpdateScheduledHours(worksheetList, scraped_scheduled_rota_data)
-    aldi_utils.updateWorksheet(sheet, sheet_values_future_A_E, f"A{first_row}:E{last_row}")
-    aldi_utils.updateWorksheet(sheet, sheet_values_future_H_L, f"H{first_row}:L{last_row}") # I may remove this section as it should be appended when inserting rows.
+    # add worked shift information
+    sheet_values_past, edit_range_past = payslip_utils.prepareUpdateWorkedHours(worksheet_data, scraped_past_rota_data, scrape_past_weeks_num)
+    payslip_utils.updateWorksheet(worksheet_class, sheet_values_past, edit_range_past)
 
-    sheet.insert_rows(values= sheet_values_future_append, row = first_row, value_input_option= ValueInputOption.user_entered)
+    # add work schedule information
+    sheet_values_future_A_E, sheet_values_future_H_L, sheet_values_future_insert, last_row, first_row  = payslip_utils.prepareUpdateScheduledHours(worksheet_data, scraped_scheduled_rota_data)
+    payslip_utils.updateWorksheet(worksheet_class, sheet_values_future_A_E, f"A{first_row}:E{last_row}")
+    payslip_utils.updateWorksheet(worksheet_class, sheet_values_future_H_L, f"H{first_row}:L{last_row}")
 
-    sheet_values_past, edit_range_past = aldi_utils.prepareUpdateWorkedHours(worksheetList, scraped_past_rota_data, scrape_past_weeks_num)
-    aldi_utils.updateWorksheet(sheet, sheet_values_past, edit_range_past)
+    worksheet_class.insert_rows(values=sheet_values_future_insert, row=first_row, value_input_option=ValueInputOption.user_entered)
 
     driver.quit()
 
-def setUpGoogleAPI() -> Spreadsheet:
+def setUpGoogleAPI() -> Worksheet:
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_name(mySecrets.google_account_creds_location, scope)
     client = gspread.authorize(creds)
@@ -115,113 +117,6 @@ def rowValuesPreset(row_num: int, date: str, day_of_week: str, shift_start: str=
             holiday, # Holiday
             '', # day off
             SpreadSheetEquations.nightHoursScheduled(row_num)]
-
-def findLastDateWithScheduledShiftDataIndex(sheet: Spreadsheet, start_row: int = 2) ->  int:
-    row = start_row
-    not_found = True
-    while not_found:
-        first_cell = sheet.cell(row, 3).value
-        if first_cell:
-            return row
-        row += 1
-    print("Row not found")
-
-def findDateRowIndex(sheet: Spreadsheet, start_row: int = 2, date: str=datetime.datetime.today().strftime("%d/%m/%y"), max_row_check: int = 150):
-    row = start_row
-
-    cell_list = sheet.range(f'A{start_row}:A{max_row_check}')
-    for cell in cell_list:
-        if cell.value == date:
-            return True, row
-        row = row + 1
-
-    print("Row not found")
-    return False, None
-
-def UpdateWorkedHours(sheet: Spreadsheet, scraped_rota_data: dict[int, dict[int,dict[str, str]]], weeks_scraped: int):
-    for week_index in range(weeks_scraped)[::-1]:
-    # for week_index in scraped_rota_data:
-        for day_index in scraped_rota_data[week_index]:
-
-            first_date_row_found = False
-
-            date_str = scraped_rota_data[week_index][day_index]['date'].strftime("%d/%m/%y")
-            week_day = scraped_rota_data[week_index][day_index]['day']
-            start_time = scraped_rota_data[week_index][day_index]['start_time']
-            end_time = scraped_rota_data[week_index][day_index]['end_time']
-            holiday = scraped_rota_data[week_index][day_index]['holiday']
-
-            # only update past dates
-            if not (datetime.datetime.strptime(date_str, "%d/%m/%y").date() < datetime.date.today()):
-                print(f'date: {date_str} is from the future, skipping')
-                continue
-
-            if not first_date_row_found:
-                date_exists, row_num = findDateRowIndex(sheet, date=date_str)
-                first_date_row_found = True
-            else: 
-                row_num += 1
-
-            row_values = rowValuesPreset(row_num, date_str, week_day, time_clocked_in=start_time, time_clocked_out=end_time, holiday=holiday)
-
-            if date_exists and row_num:
-                editRow(sheet, row_values, row_num, date_str, edit_clock_in=True)
-
-def UpdateRotaSpreadsheet(sheet: Spreadsheet, scraped_rota_data):
-
-    for week_index in scraped_rota_data:
-        for day_index in scraped_rota_data[week_index]:
-
-            date_str = scraped_rota_data[week_index][day_index]['date'].strftime("%d/%m/%y")
-            week_day = scraped_rota_data[week_index][day_index]['day']
-            start_time = scraped_rota_data[week_index][day_index]['start_time']
-            end_time = scraped_rota_data[week_index][day_index]['end_time']
-
-            # only update future dates
-            print(f'{date_str} > {datetime.datetime.today().strftime("%d/%m/%y")} result: {(datetime.datetime.strptime(date_str, "%d/%m/%y").date() > datetime.date.today())}')
-            if not (datetime.datetime.strptime(date_str, "%d/%m/%y").date() > datetime.date.today()):
-                print(date_str)
-                continue
-
-            date_exists, row_num = findDateRowIndex(sheet, date=date_str)
-
-            if row_num:
-                use_row = row_num # set a row for when we reach new lines
-
-            row_values = rowValuesPreset(use_row, date_str, week_day, start_time, end_time) 
-
-            if date_exists and row_num:
-                editRow(sheet, row_values, row_num, date_str, edit_schedule=True)
-            else:
-                addRow(sheet, row_values, use_row, date_str)
-
-def editRow(sheet: Spreadsheet, row_values, row_num, date, edit_schedule: bool = False, edit_clock_in: bool = False) -> None:
-    # print(row_values)
-    if edit_schedule: 
-        cell_range = sheet.range(f'A{row_num}:L{row_num}')
-        cell_list = setCellValues(cell_range, row_values)
-
-    elif edit_clock_in:
-        cell_list_0 = sheet.range(f'A{row_num}:B{row_num}')
-        cell_list_1 = sheet.range(f'E{row_num}:L{row_num}')
-        row_values_0 = row_values[0:2]
-        row_values_1 = row_values[4:]
-        cell_list = setCellValues(cell_list_0, row_values_0) + setCellValues(cell_list_1, row_values_1)
-
-    sheet.update_cells(cell_list, value_input_option = ValueInputOption.user_entered) # TODO: investigate issue
-    print(f"edit existting date: {date}")
-
-def setCellValues(cell_list, row_values):
-    i=0
-    for cell in cell_list:
-        cell.value = row_values[i]
-        i += 1
-    return cell_list
-
-def addRow(sheet: Spreadsheet, row_values, row_num, date):
-    # print(row_values)
-    sheet.insert_row(row_values, row_num, value_input_option = ValueInputOption.user_entered)
-    print(f"add new row for date: {date}")
 
 def navigateToRotaPage(driver: webdriver.Chrome) -> bool:
     try: 

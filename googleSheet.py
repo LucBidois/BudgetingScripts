@@ -109,15 +109,15 @@ class PaySlipSheetUtils():
                     sheet_values_H_to_L.append(self.rowValues(row_num + 1, date_str, week_day, shift_start=start_time, shift_end=end_time, holiday=holiday)[7:12])
                 else:
                     if not new_row:
-                        new_row = row_num
+                        new_row = last_editable_row
                     else:
                         new_row += 1
                     sheet_values_new_rows.append(self.rowValues(new_row, date_str, week_day, shift_start=start_time, shift_end=end_time, holiday=holiday))
 
-
         return sheet_values_A_to_E[::-1], sheet_values_H_to_L[::-1], sheet_values_new_rows[::-1], first_row, last_editable_row
 
     def prepareUpdateWorkedHours(self, worksheet: list, scraped_rota_data: dict[int, dict[int,dict[str, str]]], weeks_scraped: int):
+        # TODO: when run on a monday this is 7 days out of sync
         sheet_values = []
         first_date_row_found = False
         for week_index in range(weeks_scraped)[::-1]:
@@ -137,7 +137,7 @@ class PaySlipSheetUtils():
                 if not first_date_row_found:
                     date_exists, row_num = self.findDateRowIndex(worksheet, date=date_str)
                     first_date_row_found = True
-                    first_row = row_num
+                    first_row = row_num # + 1 needed, first is 65? 
                 else: 
                     row_num -= 1
                 
