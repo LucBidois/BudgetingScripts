@@ -20,8 +20,9 @@ EDITING "Payday expectations"
 """
 
 import datetime
+from dateutil.relativedelta import relativedelta
 from enum import Enum
-from gspread import Spreadsheet
+from gspread import Client, Spreadsheet, Worksheet
 from gspread.utils import ValueInputOption
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -52,34 +53,48 @@ class GoogleSpreadSheetUtils():
     def setUpGoogleAPI(self, 
                        worksheet_name: str, 
                        worksheet_page_name: str, 
-                       google_creds: str=mySecrets.google_account_creds_location) -> Spreadsheet:
+                       google_creds: str=mySecrets.google_account_creds_location) -> Worksheet:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds = ServiceAccountCredentials.from_json_keyfile_name(google_creds, scope)
         client = gspread.authorize(creds)
         return client.open(worksheet_name).worksheet(worksheet_page_name)
 
-    def readSpreadsheet(self, worksheet: Spreadsheet, range: str) -> list[list]:
+    def getGoogleClient(self, google_creds: str=mySecrets.google_account_creds_location) -> Client:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_name(google_creds, scope)
+        return gspread.authorize(creds)
+
+    def openSpreadsheet(self, client: Client, worksheet_name: str) -> Spreadsheet:
+        return client.open(worksheet_name)
+
+    def openWorksheetPage(self, client: Client, worksheet_name: str, page_name: str) -> Worksheet:
+        return client.open(worksheet_name).worksheet(page_name)
+
+    def readWorksheet(self, worksheet: Worksheet, range: str) -> list[list]:
         return worksheet.get(range)
     
     def debugPrintSpreadsheetValues(self, input):
         for i in input:
             print(i)
 
+
 class PaySlipSheetUtils():
     """
     Class holding methods and attributs only used by my pay and rota tracking spreadsheet
     """
-    def getWorksheet(self, worksheet_name: str = mySecrets.google_income_worksheet_name, page_name:  str = mySecrets.google_income_page_2_name, range: str = "A1:L") -> {list[list], Spreadsheet.worksheet}:
-        g_utils = GoogleSpreadSheetUtils()
-        sheet = g_utils.setUpGoogleAPI(worksheet_name, page_name)
-        return g_utils.readSpreadsheet(sheet, range), sheet
+    g_utils: GoogleSpreadSheetUtils = GoogleSpreadSheetUtils()
+    client: Client                  = g_utils.getGoogleClient()
+    spreadsheet: Spreadsheet        = g_utils.openSpreadsheet(client, mySecrets.google_income_worksheet_name)
 
+    def getWorksheet(self, page_name: str, range: str) -> {list[list], Worksheet}:
+        worksheet_class = self.spreadsheet.worksheet(page_name)
+        return self.g_utils.readWorksheet(worksheet_class, range), worksheet_class
+    
     def prepareUpdateScheduledHours(self, worksheet:list, scraped_scheduled_data: dict[int, dict[int, dict[str, str]]]):
         sheet_values_A_to_E = []
         sheet_values_H_to_L = []
         sheet_values_new_rows = []
         new_row = 0
-        # first_date_row_found = False
         first_row = 0
 
         for week_index in scraped_scheduled_data:
@@ -117,7 +132,6 @@ class PaySlipSheetUtils():
         return sheet_values_A_to_E[::-1], sheet_values_H_to_L[::-1], sheet_values_new_rows[::-1], first_row, last_editable_row
 
     def prepareUpdateWorkedHours(self, worksheet: list, scraped_rota_data: dict[int, dict[int,dict[str, str]]], weeks_scraped: int):
-        # TODO: when run on a monday this is 7 days out of sync
         sheet_values = []
         first_date_row_found = False
         for week_index in range(weeks_scraped)[::-1]:
@@ -137,7 +151,7 @@ class PaySlipSheetUtils():
                 if not first_date_row_found:
                     date_exists, row_num = self.findDateRowIndex(worksheet, date=date_str)
                     first_date_row_found = True
-                    first_row = row_num # + 1 needed, first is 65? 
+                    first_row = row_num + 1
                 else: 
                     row_num -= 1
                 
@@ -147,10 +161,9 @@ class PaySlipSheetUtils():
         if date_exists and row_num:
             edit_range = f'F{row_num + 1}:L{first_row + 1}'
             return sheet_values[::-1], edit_range
-            # sheet.update(sheet_values, edit_range, value_input_option = ValueInputOption.user_entered )
 
-    def updateWorksheet(self, spreadsheet, sheet_values, edit_range):
-        spreadsheet.update(sheet_values, edit_range, value_input_option = ValueInputOption.user_entered )
+    def updateWorksheet(self, worksheet: Worksheet, sheet_values: list[list], edit_range: str):
+        worksheet.update(sheet_values, edit_range, value_input_option = ValueInputOption.user_entered )
 
 
     def rowValues(self, row_num: int, date: str, day_of_week: str, shift_start: str='',
@@ -169,6 +182,31 @@ class PaySlipSheetUtils():
             '', # day off
             SpreadSheetEquations.nightHoursScheduled(row_num)]
 
+    def payExpectationsRowValues(self, month_period: str, row: int, range_start_for_month: str, range_end_for_month: str, payslip: dict) -> list:
+        return [
+            month_period, # period (Month YY)
+            "108.33", # basic units (contract 25 hours per week)
+            f"=D{row-1}-B{row-1}", # Last Month Adjustment
+            f"=SUM('{mySecrets.google_income_page_2_name}'!H{range_end_for_month}:H{range_start_for_month})", # Total worked hours. ex "H53:H83"
+            f"=SUM('{mySecrets.google_income_page_2_name}'!I{range_end_for_month}:I{range_start_for_month}) * 0.2", # Night hours
+            f"=SUM('{mySecrets.google_income_page_2_name}'!J{range_end_for_month}:J{range_start_for_month}) * 5 * O{row}", # Holiday Pay
+            f"=B{row}*O{row}+C{row}*O{row-1}+E{row-1}*O{row-1}+F{row-1}", # Total
+            '', # Pension adjustment
+            '', # Deductions 
+            f"=K{row-1}-B{row-1}", # Scheduled adjustment for last month 
+            f"=SUM('{mySecrets.google_income_page_2_name}'!E{range_end_for_month}:E{range_start_for_month})", # Scheduled hours
+            f"=SUM('{mySecrets.google_income_page_2_name}'!L{range_end_for_month}:L{range_start_for_month}) * 0.2", # total scheduled night hours 
+            f"=SUM('{mySecrets.google_income_page_2_name}'!J{range_end_for_month}:J{range_start_for_month}) * 5 * O{row}", # total scheduled Holiday Pay
+            f"=O{row} * (B{row}) + O{row-1} * (J{row} + L{row-1}) + M{row-1}", # Total from schedule
+            "13.02", # Pay rate for month 
+            payslip['salary'], # Gross Salary (Currently changed to 13.02 per hour)
+            payslip['pension_AE'], # Pension AE
+            payslip['deductions'], # Deductions 
+            payslip['net_salary'], # Net Salary 
+            '', # ''
+            f"=P{row}-G{row}" # Expected vs actual
+            ] 
+
     def findDateRowIndex(self, worksheet: list, date: str=datetime.datetime.today().strftime("%d/%m/%y")):
 
         for row in range(len(worksheet)):
@@ -177,49 +215,116 @@ class PaySlipSheetUtils():
 
         print(f"Row not found for date {date}")
         return False, None
-
-    def editRow(self, sheet: Spreadsheet, row_values, row_num, date, edit_schedule: bool = False, edit_clock_in: bool = False) -> None:
-    # print(row_values)
-        if edit_schedule: 
-            cell_range = sheet.range(f'A{row_num}:L{row_num}')
-            cell_list = self.setCellValues(cell_range, row_values)
-
-        elif edit_clock_in:
-            cell_list_0 = sheet.range(f'A{row_num}:B{row_num}')
-            cell_list_1 = sheet.range(f'E{row_num}:L{row_num}')
-            row_values_0 = row_values[0:2]
-            row_values_1 = row_values[4:]
-            cell_list = self.setCellValues(cell_list_0, row_values_0) + self.setCellValues(cell_list_1, row_values_1)
-
-        sheet.update_cells(cell_list, value_input_option = ValueInputOption.user_entered) # TODO: investigate issue
-        print(f"edit existting date: {date}")
-
-    def setCellValues(self, cell_list, row_values):
-        i=0
-        for cell in cell_list:
-            cell.value = row_values[i]
-            i += 1
-        return cell_list
     
-    def test(self):
+    def getFirstAndLastRow(self, worksheet: list, month: datetime.date):
+        first_row = 0
+        last_row = 0
 
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name(mySecrets.google_account_creds_location, scope)
-        client = gspread.authorize(creds)
-        sheet = client.open(mySecrets.google_income_worksheet_name)
-        worksheet = sheet.worksheet(mySecrets.google_income_page_2_name)
+        start_date = month.replace(day=1)
+        end_date = month + relativedelta(months=1, days=-1)
+
+        for i in range(len(worksheet)):
+            row_num = i+1
+            if worksheet[i][0] == "Date":
+                continue
+
+            if first_row and last_row:
+                return first_row, last_row
+            
+            if datetime.datetime.strptime(worksheet[i][0], "%d/%m/%y").date() == start_date:
+                first_row = row_num
+            elif datetime.datetime.strptime(worksheet[i][0], "%d/%m/%y").date() == end_date:
+                last_row = row_num
+
+    def updatePayExpectations(self, payslip_data): # TODO: no update is taking place
+        # payslip_data needs to be a list of the information for each month we plan on editing. 
+        null_payslip = {}
+
+        payslip_worksheet_list, payslip_worksheet = self.getWorksheet(page_name=mySecrets.google_income_page_1_name, range="A1:U")
+        rota_worksheet_list, rota_worksheet = self.getWorksheet(page_name=mySecrets.google_income_page_2_name, range="A1:L")
+
+        this_month = datetime.date.today().replace(day=1)
+        next_month = this_month + relativedelta(months=1)
+        last_month = this_month - relativedelta(months=1)
+        compare_month = datetime.datetime.strptime(payslip_worksheet_list[-1][0], '%B %y').date().replace(day=1)
+
+        # for rows that exist, update values
+        for i in range(len(payslip_worksheet_list)):
+            
+            row_num = i+1 
+
+            # skip headers row
+            if payslip_worksheet_list[i][0] == "Period":
+                continue
+
+            # print(i)
+            # print(payslip_worksheet_list[i])
+            compare_month = datetime.datetime.strptime(payslip_worksheet_list[i][0], '%B %y').date().replace(day=1)
+
+
+            print(compare_month)
+            # only update bottom of the table
+            # if (compare_month == this_month) or (compare_month == next_month) or (compare_month == last_month):
+            if (compare_month == this_month):
+                start_row, end_row = self.getFirstAndLastRow(rota_worksheet_list, compare_month)
+                self.updatePayslipDetailsForRow(payslip_worksheet, compare_month, start_row, end_row, row_num, payslip_data)
+
+        # if datetime.datetime.strptime(payslip_worksheet_list[-1][0], '%B %y').date().replace(day=1) != next_month: 
+        #     month_period = datetime.datetime.strftime(next_month, '%B %y')
+        #     row = len(payslip_worksheet_list)
+        #     start_row, end_row = self.getFirstAndLastRow(rota_worksheet_list, compare_month)
+
+        #     new_row_values = self.payExpectationsRowValues(month_period, row, start_row, end_row, payslip = payslip_data)
+        #     payslip_worksheet.insert_rows(values=[new_row_values], row=row, value_input_option=ValueInputOption.user_entered)
+        #        if no next month, add new row 
+        
+
+    def updatePayslipDetailsForRow(self, worksheet, month, start_row, end_row, edit_row, payslip_data = {'salary':'','pension_AE': '','deductions': '','net_salary': '' }):
+        month_period = datetime.datetime.strftime(month, '%B %y')
+        new_row = self.payExpectationsRowValues(month_period, edit_row, start_row, end_row, payslip_data)
+        self.updateWorksheet(worksheet, [new_row], f"A{edit_row}")
+
+
+    # def test(self):
+    #     self.updatePayExpectations()
+
+        # for row in worksheet_list:
+        #     # skip first row 
+        #     if row[0] == 'Period':
+        #         continue
+
+            # row[0] # month
+        
+            # which month is it,
+            # find first and last date value from worked hours worksheet. 
+            # grab payslip data. {'salary': '','pension': '','deductions': '','net_salary': ''}
+            # payExpectationsRowValues(row[0], row.index, range_start_for_month, range_end_for_month, payslip)
+
+
+        
+        
+        # get rota worksheet
+        # get monthly income breakdown worksheet
+        # for each month in the monthly income breakdown, we want to insert the predition of pay information.  
+
+        # at the end of each month, we want to add the real payslip information. 
+        # - we need a way to check which payslips are available 
+        # - selenium navigation 
+        # - beautiful soup grabbing relevant information. 
+        
 
         # worksheet_values, sheet = self.getWorksheet(mySecrets.google_income_worksheet_name, mySecrets.google_income_page_2_name)
-        print(sheet)
-        values = [['testing', '', '', '', '', '', '', '', '', '', 'testing2'], ['testing3', '', '', '', '', '', 'hello', '', '', '', 'testing4']]
+        # print(sheet)
+        # values = [['testing', '', '', '', '', '', '', '', '', '', 'testing2'], ['testing3', '', '', '', '', '', 'hello', '', '', '', 'testing4']]
         # sheet.batch_update()
         # sheet.values_append(range = 'Worked hours - day!A6:L6', params = {'valueInputOption': 'USER_ENTERED', 'insertDataOption' : 'INSERT_ROWS'}, body = {'values': values}) # this has updated at the bottom...
         # worksheet.append_rows() # this will also only add rows at the end of the table. 
         # worksheet.insert_cols(values= values, col = 6, value_input_option= ValueInputOption.user_entered)
-        worksheet.insert_rows(values= values, row = 6, value_input_option= ValueInputOption.user_entered)
+        # worksheet.insert_rows(values= values, row = 6, value_input_option= ValueInputOption.user_entered)
 
 
 class BudgetingSheetUtils():
+    pass
     """
     Class holding methods and attributes used in my budget spreadsheet. 
     Child classes may include
@@ -231,6 +336,6 @@ class BudgetingSheetUtils():
     """
 
 if __name__ == "__main__":
-    # payslip = PaySlipSheetUtils()
-    # payslip.test()
+    payslip = PaySlipSheetUtils()
+    payslip.test()
     pass
