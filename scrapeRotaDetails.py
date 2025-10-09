@@ -3,6 +3,7 @@ import time
 import datetime
 from enum import Enum
 from bs4 import BeautifulSoup
+from dateutil.relativedelta import relativedelta
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
@@ -40,7 +41,8 @@ class XPaths(Enum):
     payslip_option = "//*[@id='MegaMenu']/nav/div[1]/div[1]/div[3]/div/ul/li[1]/a"
     second_session_login = "//*[@id='SubSessionPassword']"
 
-    month_dropdown_menu = "/html/body/div[3]/div[1]/div[2]/div[4]/div[7]/div/div/div[2]/div/div/div/div/div/div/div/div/div[1]/span[1]/button"
+    month_dropdown_menu = "/html/body/div[3]/div[1]/div[2]/div[4]/div[7]/div/div/div[2]/div/div/div/div/div/div/div/div/div[1]/span[1]/button/span"
+    previous_available_month_payslip = "/html/body/div[3]/div[1]/div[2]/div[4]/div[7]/div/div/div[2]/div/div/div/div/div/div/div/div/div[1]/span[1]/ul/li[2]"
 
     gross_salary = "/html/body/div[3]/div[1]/div[2]/div[4]/div[7]/div/div/div[2]/div/div/div/div/div/div/div/div/div[2]/div/div/div[1]/div[2]"
     deductions = "/html/body/div[3]/div[1]/div[2]/div[4]/div[7]/div/div/div[2]/div/div/div/div/div/div/div/div/div[3]/div/div/div[1]/div[2]"
@@ -128,9 +130,10 @@ def findAndScrapePayslipData() -> dict:
         return False
 
     data = {}
-    data['this_month'] = scrapePayslipData(driver)
-    navigateToLastMonth(driver)
-    data['last_month'] = scrapePayslipData(driver)
+    data['this_month'] = scrapePayslipData(driver, datetime.date.today().strftime("%B %Y")) # if payslip is not available, this should return empty strings {'salary': '', 'pension_AE': '', 'deductions': '', 'net_salary': ''} 
+    if not data['this_month'] == {'salary': '', 'pension_AE': '', 'deductions': '', 'net_salary': ''}:
+        navigateToLastMonth(driver)
+    data['last_month'] = scrapePayslipData(driver, (datetime.date.today() - relativedelta(months=1)).strftime("%B %Y"))
     data['next_month'] = {'salary': '', 'pension_AE': '', 'deductions': '', 'net_salary': ''} 
 
     driver.quit()
@@ -138,13 +141,19 @@ def findAndScrapePayslipData() -> dict:
     return data
 
 def navigateToLastMonth(driver: webdriver.Chrome):
-    driver.find_element(By.XPATH, "/html/body/div[3]/div[1]/div[2]/div[4]/div[7]/div/div/div[2]/div/div/div/div/div/div/div/div/div[1]/span[1]/button/span").click()
-    driver.find_element(By.XPATH, "/html/body/div[3]/div[1]/div[2]/div[4]/div[7]/div/div/div[2]/div/div/div/div/div/div/div/div/div[1]/span[1]/ul/li[2]").click() # 1 is this month 2 is last 
+    driver.find_element(By.XPATH, XPaths.month_dropdown_menu.value).click()
+    driver.find_element(By.XPATH, XPaths.previous_available_month_payslip.value).click()
     time.sleep(2)
 
-def scrapePayslipData(driver: webdriver.Chrome) -> dict :
+def scrapePayslipData(driver: webdriver.Chrome, month_year: str) -> dict :
     soup = BeautifulSoup(driver.page_source, "html.parser")
     data = []
+
+    this_payslip_month = soup.find('span', class_='dropdown fl month').find('button').text.strip()
+
+    if this_payslip_month != month_year:
+        return {'salary': '', 'pension_AE': '', 'deductions': '', 'net_salary': ''}
+
     for tr in soup.find('table', class_='table').find_all('tr'):
         row = [td.text for td in tr.find_all('td')]
         data.append(row)
