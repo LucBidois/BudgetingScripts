@@ -114,20 +114,35 @@ def navigateToPayslipData(driver: webdriver.Chrome) -> bool:
 
     return True
 
-def findAndScrapePayslipData():
+def findAndScrapePayslipData() -> dict:
     driver = setUpforSelenium()
 
     successful_login = logIntoWebsite(driver)
     if not successful_login:
+        driver.quit()
         return False
 
     successful_navigation = navigateToPayslipData(driver)
     if not successful_navigation:
+        driver.quit()
         return False
 
-    return scrapePayslipData(driver)
+    data = {}
+    data['this_month'] = scrapePayslipData(driver)
+    navigateToLastMonth(driver)
+    data['last_month'] = scrapePayslipData(driver)
+    data['next_month'] = {'salary': '', 'pension_AE': '', 'deductions': '', 'net_salary': ''} 
 
-def scrapePayslipData(driver: webdriver.Chrome):
+    driver.quit()
+
+    return data
+
+def navigateToLastMonth(driver: webdriver.Chrome):
+    driver.find_element(By.XPATH, "/html/body/div[3]/div[1]/div[2]/div[4]/div[7]/div/div/div[2]/div/div/div/div/div/div/div/div/div[1]/span[1]/button/span").click()
+    driver.find_element(By.XPATH, "/html/body/div[3]/div[1]/div[2]/div[4]/div[7]/div/div/div[2]/div/div/div/div/div/div/div/div/div[1]/span[1]/ul/li[2]").click() # 1 is this month 2 is last 
+    time.sleep(2)
+
+def scrapePayslipData(driver: webdriver.Chrome) -> dict :
     soup = BeautifulSoup(driver.page_source, "html.parser")
     data = []
     for tr in soup.find('table', class_='table').find_all('tr'):
@@ -139,12 +154,6 @@ def scrapePayslipData(driver: webdriver.Chrome):
                     'deductions': driver.find_element(By.XPATH, XPaths.deductions.value).text,
                     'net_salary': driver.find_element(By.XPATH, XPaths.net_salary.value).text} 
     return payslip_data
-
-def updatePayslipData():
-    data = findAndScrapePayslipData()
-
-    payslip_utils = PaySlipSheetUtils()
-    payslip_utils.updatePayExpectations(data)
 
 def navigateToRotaPage(driver: webdriver.Chrome) -> bool:
     try: 
@@ -208,23 +217,19 @@ def scrapeRotaForTheWeek(page_source, week_start_date) -> dict[int, dict]:
         day_div = [d.get_text(strip=True) for d in day_div if d.name == 'div']
 
         # time is always 5 characters, including the colon
-        if day_div and not (day_div[0][0:7] == "Holiday") and not (day_div[0][0:11] == "Unpaid Sick"):
+        if day_div and not (day_div[0][0:7] == "Holiday") and not (day_div[0][0:11] == "Unpaid Sick") and not (day_div[0][0:7] == "Day Off"):
             start_time_index = day_div[0].find(":") - 2
             start_time = day_div[0][start_time_index:start_time_index+5]
             end_time_index = day_div[-1].find(":") - 2
             end_time = day_div[-1][end_time_index+6:end_time_index+11]
-
-        if day_div and day_div[0][0:7] == "Holiday":
-            holiday = '1' # magic values match spreadsheet
-        else:
-            holiday = ''
 
         results[week_day] = {
             "date" : scrape_date,
             "day" : WeekDay(scrape_date.weekday()).string(),
             "start_time": start_time,
             "end_time": end_time,
-            "holiday": holiday
+            "holiday": '1' if day_div and day_div[0][0:7] == "Holiday" else '',
+            "day_off": '1' if day_div and day_div[0][0:7] == "Day Off" else ''
         }
 
     return results
@@ -293,6 +298,6 @@ def FillInputField(driver: webdriver.Chrome, element_name, input_value) -> None:
 
 if __name__ == "__main__":
     # main()
-    updatePayslipData()
     # Pause the script to allow user to see the browser for testing purposes
     # pause = input("Press Enter to continue...")
+    pass
