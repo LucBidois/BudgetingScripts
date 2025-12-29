@@ -92,7 +92,8 @@ class PaySlipSheetUtils():
                     continue
                 
                 date_exists, row_num = self.findDateRowIndex(worksheet, date=date_str)
-
+                
+                # What happens if row_num is None?
                 if row_num:
                     last_editable_row = row_num + 1
 

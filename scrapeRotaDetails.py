@@ -37,8 +37,11 @@ class XPaths(Enum):
     search_result_my_rota = "//*[@id='searchResults']/div[1]/div/div/div/div"
     search_bar = "//*[@id='search']/div/div/div[2]/div/div/div/div[2]/input"
     search_window = "//*[@id='MainOakOptions']/div/a[1]/div"
-    finances_menu = "//*[@id='MegaMenu']/nav/div[1]/div[1]/div/span[1]"
-    payslip_option = "//*[@id='MegaMenu']/nav/div[1]/div[1]/div[3]/div/ul/li[1]/a"
+    finances_menu = "/html/body/div[3]/div[1]/div[1]/div/div[1]/div[1]/nav/div[1]/div[1]/div/span[2]"
+    payslip_option = "/html/body/div[3]/div[1]/div[1]/div/div[1]/div[1]/nav/div[1]/div[1]/div[3]/div/div/div[1]"
+    # finances_menu =//*[@id="MegaMenu"]/nav/div[1]/div[1]/div[3]/div/div/div[1]
+    # finances_menu = "//*[@id='MegaMenu']/nav/div[1]/div[1]/div/span[1]"
+    # payslip_option = "//*[@id='MegaMenu']/nav/div[1]/div[1]/div[3]/div/ul/li[1]/a"
     second_session_login = "//*[@id='SubSessionPassword']"
 
     month_dropdown_menu = "/html/body/div[3]/div[1]/div[2]/div[4]/div[7]/div/div/div[2]/div/div/div/div/div/div/div/div/div[1]/span[1]/button/span"
@@ -78,14 +81,14 @@ def scrape_rota_data(driver: webdriver.Chrome) -> {dict[int, dict[int, dict[str,
     if not successful_login:
         print("Login failed, exiting script.")
         driver.quit()
-        return
+        return None, None, None
 
     successful_navigation = navigateToRotaPage(driver)
 
     if not successful_navigation:
         print("Navigation to rota page failed, exiting script.")
         driver.quit()
-        return
+        return None, None, None
 
     driver.switch_to.default_content()
     driver.switch_to.frame("main")
