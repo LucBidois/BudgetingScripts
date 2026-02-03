@@ -73,7 +73,7 @@ class PaySlipSheetUtils():
         sheet_values_A_to_E = []
         sheet_values_H_to_L = []
         sheet_values_new_rows = []
-        new_row = 0
+        new_row = 9 # New entries added in weeks, index starts at 2, and we -1 before appending to list
         first_row = 0
 
         for week_index in scraped_scheduled_data:
@@ -93,9 +93,11 @@ class PaySlipSheetUtils():
                 
                 date_exists, row_num = self.findDateRowIndex(worksheet, date=date_str)
 
+                # sets last row that is edited in spreadsheet
                 if row_num:
                     last_editable_row = row_num + 1
 
+                # First row in entireblock to edit
                 if not first_row:
                     first_row = row_num + 1
 
@@ -103,10 +105,7 @@ class PaySlipSheetUtils():
                     sheet_values_A_to_E.append(self.rowValues(row_num + 1, date_str, week_day, shift_start=start_time, shift_end=end_time, holiday=holiday, day_off=day_off)[0:5]) 
                     sheet_values_H_to_L.append(self.rowValues(row_num + 1, date_str, week_day, shift_start=start_time, shift_end=end_time, holiday=holiday, day_off=day_off)[7:12])
                 else:
-                    if not new_row:
-                        new_row = last_editable_row
-                    else:
-                        new_row += 1
+                    new_row -= 1
                     sheet_values_new_rows.append(self.rowValues(new_row, date_str, week_day, shift_start=start_time, shift_end=end_time, holiday=holiday, day_off=day_off))
 
         return sheet_values_A_to_E[::-1], sheet_values_H_to_L[::-1], sheet_values_new_rows[::-1], first_row, last_editable_row
