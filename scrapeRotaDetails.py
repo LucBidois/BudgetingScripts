@@ -38,10 +38,7 @@ class XPaths(Enum):
     search_bar = "//*[@id='search']/div/div/div[2]/div/div/div/div[2]/input"
     search_window = "//*[@id='MainOakOptions']/div/a[1]/div"
     finances_menu = "/html/body/div[3]/div[1]/div[1]/div/div[1]/div[1]/nav/div[1]/div[1]/div/span[2]"
-    payslip_option = "/html/body/div[3]/div[1]/div[1]/div/div[1]/div[1]/nav/div[1]/div[1]/div[3]/div/div/div[1]"
-    # finances_menu =//*[@id="MegaMenu"]/nav/div[1]/div[1]/div[3]/div/div/div[1]
-    # finances_menu = "//*[@id='MegaMenu']/nav/div[1]/div[1]/div/span[1]"
-    # payslip_option = "//*[@id='MegaMenu']/nav/div[1]/div[1]/div[3]/div/ul/li[1]/a"
+    payslip_option = "/html/body/div[3]/div[1]/div[1]/div/div[1]/div[1]/nav/div[1]/div[1]/div[3]/div/div/div[1]/a"
     second_session_login = "//*[@id='SubSessionPassword']"
 
     month_dropdown_menu = "/html/body/div[3]/div[1]/div[2]/div[4]/div[7]/div/div/div[2]/div/div/div/div/div/div/div/div/div[1]/span[1]/button/span"
@@ -114,7 +111,7 @@ def navigateToPayslipData(driver: webdriver.Chrome) -> bool:
         time.sleep(3) # wait for page to load
 
     except Exception as e :
-        print(f"failed with exception {e}")
+        print(f"Failed to navigate to payslip data with error: {e}")
         return False
 
     return True

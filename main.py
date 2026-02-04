@@ -29,16 +29,25 @@ def updateRota():
 
 def updatePayslips():
     data = scrapeRotaDetails.findAndScrapePayslipData()
+    
+    if not data:
+        print("No payslip data found")
+        return
 
     this_month = datetime.date.today().replace(day=1)
     last_month = this_month - relativedelta(months=1)
     next_month = this_month + relativedelta(months=1)
 
-
-    payslip_utils = googleSheet.PaySlipSheetUtils()
-    payslip_utils.updatePayExpectations(data['this_month'], this_month)
-    payslip_utils.updatePayExpectations(data['last_month'], last_month)
-    payslip_utils.updatePayExpectations(data['next_month'], next_month)
+    try:
+        payslip_utils = googleSheet.PaySlipSheetUtils()
+        payslip_utils.updatePayExpectations(data['this_month'], this_month)
+        payslip_utils.updatePayExpectations(data['last_month'], last_month)
+        payslip_utils.updatePayExpectations(data['next_month'], next_month)
+    except Exception as e: 
+        print(f"Error updating payslip data: {e}")
+        return
+    
+    print("Payslip data has been updated.")
 
 def updateExpenses():
     scrape_utils = ScrapeStatements()
