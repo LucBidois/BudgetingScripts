@@ -1,16 +1,90 @@
+from pydoc import doc
+import re
 import time
+
+import fitz
+import matplotlib
+import pandas
+import numpy
+
 import seleniumUtils
 import mySecrets
 from selenium.webdriver.common.by import By
-import pymupdf
+import pymupdf ## issue, does not deal with empty cells in tables well. 
 
-"""
-camelot
-tabula
-pdf plumber
-pdftables
-pdfminer
-"""
+
+from operator import itemgetter
+from itertools import groupby
+import fitz
+
+
+# ==============================================================================
+# Function ParseTab - parse a document table into a Python list of lists
+# ==============================================================================
+def ParseTab(page, bbox, columns=None):
+    """Returns the parsed table of a page in a PDF / (open) XPS / EPUB document.
+    Parameters:
+    page: fitz.Page object
+    bbox: containing rectangle, list of numbers [xmin, ymin, xmax, ymax]
+    columns: optional list of column coordinates. If None, columns are generated
+    Returns the parsed table as a list of lists of strings.
+    The number of rows is determined automatically
+    from parsing the specified rectangle.
+    """
+    tab_rect = fitz.Rect(bbox).irect
+    xmin, ymin, xmax, ymax = tuple(tab_rect)
+
+    if tab_rect.is_empty or tab_rect.is_infinite:
+        print("Warning: incorrect rectangle coordinates!")
+        return []
+
+    if type(columns) is not list or columns == []:
+        coltab = [tab_rect.x0, tab_rect.x1]
+    else:
+        coltab = sorted(columns)
+
+    if xmin < min(coltab):
+        coltab.insert(0, xmin)
+    if xmax > coltab[-1]:
+        coltab.append(xmax)
+
+    words = page.get_text("words")
+
+    if words == []:
+        print("Warning: page contains no text")
+        return []
+
+    alltxt = []
+
+    # get words contained in table rectangle and distribute them into columns
+    for w in words:
+        ir = fitz.Rect(w[:4]).irect  # word rectangle
+        if ir in tab_rect:
+            cnr = 0  # column index
+            for i in range(1, len(coltab)):  # loop over column coordinates
+                if ir.x0 < coltab[i]:  # word start left of column border
+                    cnr = i - 1
+                    break
+            alltxt.append([ir.x0, ir.y0, ir.x1, cnr, w[4]])
+
+    if alltxt == []:
+        print("Warning: no text found in rectangle!")
+        return []
+
+    alltxt.sort(key=itemgetter(1))  # sort words vertically
+
+    # create the table / matrix
+    spantab = []  # the output matrix
+
+    for y, zeile in groupby(alltxt, itemgetter(1)):
+        schema = [""] * (len(coltab) - 1)
+        for c, words in groupby(zeile, itemgetter(3)):
+            entry = " ".join([w[4] for w in words])
+            schema[c] = entry
+        spantab.append(schema)
+
+    return spantab
+
 
 class ScrapeStatements():
 
@@ -27,30 +101,24 @@ class ScrapeStatements():
         # NOTE: this often results in an error on the side of the bank possibly, they are able to detect the automation.
 
     def scrapeCreditCardPdf(self, month):
+
         doc = pymupdf.open("bank_statements/Statement_3668_Aug-25.pdf")
-        out = open("output.txt", "wb") # create a text output
-        for page in doc: # iterate the document pages
-            # tables = page.find_tables()
+        page = doc[2]
 
-            # for table in tables: 
-            #     tableinfo = table.extract()
-            #     print(tableinfo)
-            text = page.get_text().encode("utf8") # get plain text (is in UTF-8)
+        top_of_table = page.search_for("Your Transactions")[0].y1
+        bottom_of_table = page.search_for("STATEMENT CLOSING BALANCE")[0].y0
 
-            """
-            new lines are used for each column
-            I could find each new row by looking for the new date for each new transaction
-            some Details fields are on more than one line. 
-            On each new page I need to ignore the headers. 
+        print(top_of_table, bottom_of_table)
 
-            I can stop extracting when I reach the closing balance line. 
+        table = ParseTab(page, pymupdf.Rect(0, top_of_table, page.rect.width, bottom_of_table))
 
-            Credit card and debit card have slight different formats. 
-            """
-
-            out.write(text) # write text of page
-            out.write(bytes((12,))) # write page delimiter (form feed 0x0C)
-        out.close()
+        for t in table:
+            # match rows with dates (discards new lines in descriptions)
+            if re.match(r'\d\d \w{3} \d\d', t[0]):
+                split = re.split(r' ', t[0])
+                date = " ".join(split[0:3])
+                description = " ".join(split[4:-2])
+                print(date, description, split[-2], split[-1])
 
     def scrapeJointAccountPdf(self, month):
         pass
@@ -112,4 +180,5 @@ class BankSeleniumUtils():
 
 if __name__ == "__main__":
     scraper = ScrapeStatements()
+    # scraper.scrapeJointAccountPdf("month")
     scraper.scrapeCreditCardPdf("month")
