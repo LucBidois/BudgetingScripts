@@ -4,7 +4,7 @@ from tkinter import ttk
 import scrapeRotaDetails
 import googleSheet
 from dateutil.relativedelta import relativedelta
-from scrapeStatements import ScrapeStatements, BankSeleniumUtils
+from scrapeStatements import ScrapeStatements
 
 def main():
 
