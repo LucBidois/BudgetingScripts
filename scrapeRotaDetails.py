@@ -226,7 +226,8 @@ def scrapeRotaForTheWeek(page_source, week_start_date) -> dict[int, dict]:
         day_div = [d.get_text(strip=True) for d in day_div if d.name == 'div']
 
         # time is always 5 characters, including the colon
-        if day_div and not (day_div[0][0:7] == "Holiday") and not (day_div[0][0:11] == "Unpaid Sick") and not (day_div[0][0:7] == "Day Off"):
+        if (day_div and not (day_div[0][0:7] == "Holiday") and not (day_div[0][0:11] == "Unpaid Sick") 
+            and not (day_div[0][0:7] == "Day Off") and not (day_div[0][0:9] == "Paternity")):
             start_time_index = day_div[0].find(":") - 2
             start_time = day_div[0][start_time_index:start_time_index+5]
             end_time_index = day_div[-1].find(":") - 2
