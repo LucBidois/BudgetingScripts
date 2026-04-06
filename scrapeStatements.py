@@ -22,20 +22,23 @@ class ScrapeStatements():
     def scrapeJointAccountPdf(self, month):
 
         file_path = f"bank_statements/Statement_3668_{month}.pdf"
-        self.scrapePdf(file_path)
+        return self.scrapePdf(file_path)
 
+    def scrapeStatementPage(self, page, starting_balance = None, last_balance = None):
 
+        if page.search_for("STATEMENT OPENING BALANCE"):
+            print("first page")
+            # TODO: need to handle first page differently to other pages - starting balance is not empty after first page.
+            # maybe make starting balance a parameter in this fucntion, as the page is known before calling
 
-    def scrapePdf(self, file_path):
-        doc = pymupdf.open(file_path)
-        page = doc[2]
-
-        top_of_table = page.search_for("Type")[0].y1  # "STATEMENT OPENING BALANCE"
-        bottom_of_table = page.search_for("STATEMENT CLOSING BALANCE")[0].y0
+        top_of_table = page.search_for("Type")[0].y1
+        if page.search_for("STATEMENT CLOSING BALANCE"):
+            bottom_of_table = page.search_for("STATEMENT CLOSING BALANCE")[0].y0
+        else:
+            bottom_of_table = page.search_for("Continued on next page")[0].y0
 
         table = ParseTab(page, pymupdf.Rect(0, top_of_table, page.rect.width, bottom_of_table))
         
-        starting_balance = None
         table_data = []
         for row in table:
             
@@ -65,10 +68,37 @@ class ScrapeStatements():
                 # print(date, description, outflow, inflow)
                 last_balance = float(split[-1].replace(",", ""))
                 table_data.append([date, description, outflow, inflow, current_balance])
+        return starting_balance, last_balance, table_data
+
+    def findFirstandLastPagetoScrape(self, doc):
+        page = doc[2] # Always start at page 3
+        for page in doc:
+            if page.search_for("STATEMENT OPENING BALANCE"):
+                first_page = page.number
+                print(f"First page to scrape: {first_page}")
+            if page.search_for("STATEMENT CLOSING BALANCE"): # or page.search_for("Continued on next page"):
+                last_page = page.number
+                print(f"Last page to scrape: {last_page}")
+        return first_page, last_page
+
+    def scrapePdf(self, file_path):
+        doc = pymupdf.open(file_path)
         
-        return table_data
+        first_page, last_page = self.findFirstandLastPagetoScrape(doc)
+
+        starting_balance = None
+        last_balance = None
+        statement_data = []
+        for page_num in range(first_page, last_page + 1):
+            starting_balance, last_balance, table_data = self.scrapeStatementPage(page=doc[page_num], starting_balance=starting_balance, last_balance=last_balance)
+            statement_data.append(table_data)
+        
+        return statement_data
 
 if __name__ == "__main__":
     scraper = ScrapeStatements()
-    table_data = scraper.scrapeJointAccountPdf(month = "Aug-25")
+    table_data = []
+    table_data.append(scraper.scrapeJointAccountPdf(month = "Aug-25"))
+    table_data.append(scraper.scrapeJointAccountPdf(month = "Sep-25"))
+    table_data.append(scraper.scrapeJointAccountPdf(month = "Oct-25"))
     print(table_data)
