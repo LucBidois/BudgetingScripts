@@ -51,7 +51,7 @@ def updatePayslips():
 
 def updateExpenses():
     scrape_utils = ScrapeStatements()
-    scraped_data = scrape_utils.scrapeExpenses()
+    scraped_data = scrape_utils.scrapeExpenses(scrape_from_date = None, scrape_to_date = None)
     budgetUtils = googleSheet.BudgetingSheetUtils()
     budgetUtils.UpdateExpenses(scraped_data)
 
