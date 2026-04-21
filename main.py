@@ -4,6 +4,7 @@ from tkinter import ttk
 import scrapeRotaDetails
 import googleSheet
 from dateutil.relativedelta import relativedelta
+from scrapeStatements import ScrapeStatements
 
 def main():
 
@@ -49,6 +50,24 @@ def updatePayslips():
     print("Payslip data has been updated.")
 
 def updateExpenses():
+    scrape_utils = ScrapeStatements()
+    scraped_data = scrape_utils.scrapeExpenses(scrape_from_date = None, scrape_to_date = None)
+    budgetUtils = googleSheet.BudgetingSheetUtils()
+    budgetUtils.UpdateExpenses(scraped_data)
+
+    pass
+
+def checkMonthlyRoutines():
+    """I want these routines to check that my regualr monthly bills have 1. been processed, 2 are the right amount."""
+    # utilities()
+    # CouncilTax()
+    # YearlyRoutines()
+    # car insurance
+    # water bill
+    # mortgage
+    pass
+
+def searchJobBoards():
     pass
 
 if __name__ == "__main__":
