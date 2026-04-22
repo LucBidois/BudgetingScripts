@@ -6,33 +6,22 @@ from ParseTab import ParseTab
 
 class ScrapeStatements():
 
-    def scrapeExpenses(self, scrape_from_date = None, scrape_to_date = None) -> list:
-
-        # Which Months need scraping? (either need to store last scraped pdf file, or detect from google sheet which was the last scraped day) 
-        # If we end with a list of transactions, we can choose to only add from the last scraped date
-
-        # TODO: need to check if pdf's exist
+    def scrapeExpenses(self, filepath) -> list:
         scraped_data = []
-        for month in ["Aug-25", "Sep-25", "Oct-25"]:
-            scraped_data += self.scrapeJointAccountPdf(month)
+        # TODO: check correct file using account number - check current account or credit card, or exit if wrong file selected
+        scraped_data = self.scrapePdf(filepath)
         return scraped_data
 
-    def scrapeCreditCardPdf(self, month = "Aug-25") -> list:
-
-        file_path = f"bank_statements/Statement_7313_{month}.pdf"
-        self.scrapePdf(file_path)
+    def scrapeCreditCardPdf(self, filepath) -> list:
+        self.scrapePdf(filepath)
 
         # find pdfs to date, 
         # run scrapePdf for each month needed
         # return json of data for each month
         pass
 
-    def scrapeJointAccountPdf(self, month) -> list:
-
-        file_path = f"bank_statements/Statement_3668_{month}.pdf"
-        return self.scrapePdf(file_path)
-
     def scrapeStatementPage(self, page, starting_balance = None, last_balance = None) -> tuple[float, float, list]:
+        # NOTE: detection is built around current account statements specifically
 
         top_of_table = page.search_for("Type")[0].y1 # detecting top of table using "pmnt type" in the header
         if page.search_for("STATEMENT CLOSING BALANCE"):
@@ -97,10 +86,6 @@ class ScrapeStatements():
         
         return statement_data
 
+
 if __name__ == "__main__":
-    scraper = ScrapeStatements()
-    table_data = []
-    table_data += scraper.scrapeJointAccountPdf(month = "Aug-25")
-    table_data += scraper.scrapeJointAccountPdf(month = "Sep-25")
-    table_data += scraper.scrapeJointAccountPdf(month = "Oct-25")
-    print(table_data)
+    pass
