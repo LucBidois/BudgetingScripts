@@ -296,7 +296,7 @@ class BudgetingSheetUtils():
         
         return [
             f"{date}",# Date
-            f"{description}",# Shop	
+            f"{description.lower()}",# Shop	
             "",#f"=SUM(D{row_num}:J{row_num})",# Unallocated Total	# NOTE: I could deal with this function after I have all the data. or I could ignore it, or add it manually since it's just the sum of the row.
             f"{shopping}",# Shopping	
             f"{transport}",# Transport	

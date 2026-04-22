@@ -1,6 +1,7 @@
 import datetime
 from tkinter import *
-from tkinter import ttk
+from tkinter import ttk, Tk
+from tkinter.filedialog import askopenfilename
 import scrapeRotaDetails
 import googleSheet
 from dateutil.relativedelta import relativedelta
@@ -20,7 +21,7 @@ def main() -> None:
     ttk.Button(mainframe, text="Quit", command=root.destroy).grid(column=1, row=2, sticky=W)
     ttk.Button(mainframe, text="Update rota", command=updateRota).grid(column=2, row=2, sticky=W)
     ttk.Button(mainframe, text="Update Payslip info", command=updatePayslips).grid(column=3, row=2, sticky=W)
-    ttk.Button(mainframe, text="Update expenses", command=updateExpenses).grid(column=4, row=2, sticky=W)
+    ttk.Button(mainframe, text="Update transactions", command=updateExpenses).grid(column=4, row=2, sticky=W)
 
     root.mainloop()
 
@@ -51,14 +52,25 @@ def updatePayslips() -> None:
     print("Payslip data has been updated.")
 
 def updateExpenses() -> None:
-    scrape_utils = ScrapeStatements()
-    # scraped_data = scrape_utils.scrapeExpenses(scrape_from_date = None, scrape_to_date = None)
-    csv_data = scrape_utils.scrapeCSVdata()
+    # 1. select file to scrape, 
+    # 2. if csv or pdf, scrape differnently.
+    # 3. check sheet for duplicated transactions
+    # 4. update google sheet
+    budget = googleSheet.BudgetingSheetUtils()
 
-    budgetUtils = googleSheet.BudgetingSheetUtils()
-    budgetUtils.UpdateExpenses(csv_data)
+    Tk().withdraw()
+    filepath = askopenfilename()
+    filetype = filepath.split(".")[-1]
 
-    pass
+    if filetype == "csv":
+        data = budget.readAndFormatCSVFile(filepath)
+        rows = budget.formatCSVDataForSpreadsheet(data)
+        
+    elif filetype == "pdf":
+        scrape_utils = ScrapeStatements()
+        rows = scrape_utils.scrapeExpenses(filepath)
+
+    budget.insertTransactions(rows)
 
 def checkMonthlyRoutines():
     """I want these routines to check that my regualr monthly bills have 1. been processed, 2 are the right amount."""
