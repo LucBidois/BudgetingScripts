@@ -293,7 +293,7 @@ class BudgetingSheetUtils():
     def TransactionTrackingRowValues(self, date: str, description:str, outflow: float, inflow: float) -> list: # TODO: I hate this function name, 
         
         shopping, transport, presentOrClothes, fixedMonthly, yearly, unbudgeted = self.pickOutflowCategory(outflow, description)
-        
+
         return [
             f"{date}",# Date
             f"{description.lower()}",# Shop	
@@ -304,15 +304,15 @@ class BudgetingSheetUtils():
             f"{fixedMonthly}",# Fixed Monthly	
             f"{yearly}",# Wedding	Yearly	
             f"{unbudgeted}",# Unbudgeted	
-            f"- {inflow}",# Income	
+            f"-{inflow}" if inflow else "" # Income	
         ]
     
     def pickOutflowCategory(self, outflow: float, description: str) -> list[float]:
-        shopping_keywords = ["PLATINUM M/C"]
+        shopping_keywords = ["PLATINUM M/C", "VITABIOTICS.COM"]
         transport_keywords = []
         presentOrClothes_keywords = ["CARD FACTORY"]
-        fixedMonthly_keywords = ["LUC FRANOIS THIERR", "AVIVA LIFE", "HOME INSURANCELBIS", "OCTOPUS ENERGY", "YOUR MORTGAGE", "VOWH DISTRICT COUN", "RCI FINANCIAL SERV", "LLOYDS BANK MTG", "PNET4839809-1", "STUDENT LOANS COMP", "TESCO MOBILE"]
-        yearly_keywords = ["THAMES WATER", "DVLA VEHICLE TAX"]
+        fixedMonthly_keywords = ["LUC FRANOIS THIERR", "BETHANY P MCEWAN", "AVIVA LIFE", "HOME INSURANCELBIS", "OCTOPUS ENERGY", "YOUR MORTGAGE", "RCI FINANCIAL SERV", "LLOYDS BANK MTG", "PNET4839809-1", "STUDENT LOANS COMP", "TESCO MOBILE", "WWW.BETTER.ORG.UK"]
+        yearly_keywords = ["THAMES WATER", "DVLA VEHICLE TAX", "NS&I TFC CUSTOMER", "VOWH DISTRICT COUN",]
 
         shopping, transport, presentOrClothes, fixedMonthly, yearly, unbudgeted = '', '', '', '', '', ''
 
