@@ -6,7 +6,7 @@ import googleSheet
 from dateutil.relativedelta import relativedelta
 from scrapeStatements import ScrapeStatements
 
-def main():
+def main() -> None:
 
     root = Tk()
     root.title("Finances App")
@@ -24,10 +24,10 @@ def main():
 
     root.mainloop()
 
-def updateRota():
+def updateRota() -> None:
     scrapeRotaDetails.main()
 
-def updatePayslips():
+def updatePayslips() -> None:
     data = scrapeRotaDetails.findAndScrapePayslipData()
     
     if not data:
@@ -43,17 +43,20 @@ def updatePayslips():
         payslip_utils.updatePayExpectations(data['this_month'], this_month)
         payslip_utils.updatePayExpectations(data['last_month'], last_month)
         payslip_utils.updatePayExpectations(data['next_month'], next_month)
+        print("Payslip data has been updated.")
     except Exception as e: 
         print(f"Error updating payslip data: {e}")
         return
     
     print("Payslip data has been updated.")
 
-def updateExpenses():
+def updateExpenses() -> None:
     scrape_utils = ScrapeStatements()
-    scraped_data = scrape_utils.scrapeExpenses(scrape_from_date = None, scrape_to_date = None)
+    # scraped_data = scrape_utils.scrapeExpenses(scrape_from_date = None, scrape_to_date = None)
+    csv_data = scrape_utils.scrapeCSVdata()
+
     budgetUtils = googleSheet.BudgetingSheetUtils()
-    budgetUtils.UpdateExpenses(scraped_data)
+    budgetUtils.UpdateExpenses(csv_data)
 
     pass
 

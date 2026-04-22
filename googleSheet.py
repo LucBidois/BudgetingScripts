@@ -260,7 +260,88 @@ class PaySlipSheetUtils():
             self.updateWorksheet(worksheet, [new_row], f"A{edit_row}")
 
 class BudgetingSheetUtils():
-    pass
+    g_utils: GoogleSpreadSheetUtils = GoogleSpreadSheetUtils()
+    client: Client                  = g_utils.getGoogleClient()
+    spreadsheet: Spreadsheet        = g_utils.openSpreadsheet(client, mySecrets.google_budget_worksheet_name)
+
+    def getWorksheet(self, page_name: str, range: str) -> {list[list], Worksheet}:
+        worksheet_class = self.spreadsheet.worksheet(page_name)
+        return self.g_utils.readWorksheet(worksheet_class, range), worksheet_class
+    
+    def readAndFormatCSVFile(self, file_path: str) -> dict:
+        with open(file_path, 'r') as file:
+            lines = file.readlines()
+            # formatted_data = [line.strip().split(',') for line in lines]
+
+            titles = ["Transaction Date","Transaction Type","Sort Code","Account Number","Transaction Description","Debit Amount","Credit Amount","Balance"]
+            formatted_data = []
+            for line in lines[1:]:
+                formatted_data.append({titles[i]: line.strip().split(',')[i] for i in range(len(titles))})
+         
+            return formatted_data
+
+    def formatCSVDataForSpreadsheet(self, data: list[dict]) -> list[list]:
+        formatted_data = []
+        for row in data: 
+            date = row["Transaction Date"]
+            description = row["Transaction Description"]
+            outflow = row["Debit Amount"]
+            inflow = row["Credit Amount"]
+            formatted_data.append(self.TransactionTrackingRowValues(date, description, outflow, inflow))
+        return formatted_data
+
+    def TransactionTrackingRowValues(self, date: str, description:str, outflow: float, inflow: float) -> list: # TODO: I hate this function name, 
+        
+        shopping, transport, presentOrClothes, fixedMonthly, yearly, unbudgeted = self.pickOutflowCategory(outflow, description)
+        
+        return [
+            f"{date}",# Date
+            f"{description}",# Shop	
+            "",#f"=SUM(D{row_num}:J{row_num})",# Unallocated Total	# NOTE: I could deal with this function after I have all the data. or I could ignore it, or add it manually since it's just the sum of the row.
+            f"{shopping}",# Shopping	
+            f"{transport}",# Transport	
+            f"{presentOrClothes}",# Presents/clothes	
+            f"{fixedMonthly}",# Fixed Monthly	
+            f"{yearly}",# Wedding	Yearly	
+            f"{unbudgeted}",# Unbudgeted	
+            f"- {inflow}",# Income	
+        ]
+    
+    def pickOutflowCategory(self, outflow: float, description: str) -> list[float]:
+        shopping_keywords = ["PLATINUM M/C"]
+        transport_keywords = []
+        presentOrClothes_keywords = ["CARD FACTORY"]
+        fixedMonthly_keywords = ["LUC FRANOIS THIERR", "AVIVA LIFE", "HOME INSURANCELBIS", "OCTOPUS ENERGY", "YOUR MORTGAGE", "VOWH DISTRICT COUN", "RCI FINANCIAL SERV", "LLOYDS BANK MTG", "PNET4839809-1", "STUDENT LOANS COMP", "TESCO MOBILE"]
+        yearly_keywords = ["THAMES WATER", "DVLA VEHICLE TAX"]
+
+        shopping, transport, presentOrClothes, fixedMonthly, yearly, unbudgeted = '', '', '', '', '', ''
+
+        if any(keyword in description for keyword in shopping_keywords):
+            shopping = outflow
+        elif any(keyword in description for keyword in transport_keywords):
+            transport = outflow
+        elif any(keyword in description for keyword in presentOrClothes_keywords):
+            presentOrClothes = outflow
+        elif any(keyword in description for keyword in fixedMonthly_keywords):
+            fixedMonthly = outflow
+        elif any(keyword in description for keyword in yearly_keywords):
+            yearly = outflow
+        else:
+            unbudgeted = outflow
+
+        return shopping, transport, presentOrClothes, fixedMonthly, yearly, unbudgeted
+
+    def monthlyExpenseRowValues(self, row_start: int, row_end: int) -> list:
+        return [
+        f"",#Month	
+        f"",#Shopping	
+        f"",#Transport	
+        f"",#Presents / Clothing	
+        f"",#Fixed Monthly	
+        f"",#Yearly	
+        f""#Unbudgeted
+        ]#Income
+
     """
     Class holding methods and attributes used in my budget spreadsheet. 
     Child classes may include
@@ -271,7 +352,18 @@ class BudgetingSheetUtils():
     - Using Reciepts to auto update and track expenses 
     """
 
+    def insertTransactions(self, rows: list[list]):
+        worksheet = self.spreadsheet.worksheet(mySecrets.google_budget_expense_page_name)
+        worksheet.insert_rows(rows, row=2, value_input_option = ValueInputOption.user_entered)
+
+    def test(self) -> None:
+        data = self.readAndFormatCSVFile("bank_statements/30993668_20263722_0604.csv")
+        rows = self.formatCSVDataForSpreadsheet(data)
+        self.insertTransactions(rows)
+        print("success")
+
+
 if __name__ == "__main__":
-    payslip = PaySlipSheetUtils()
-    payslip.test()
-    pass
+    budget = BudgetingSheetUtils()
+    budget.test()
+

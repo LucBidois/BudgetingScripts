@@ -6,6 +6,9 @@ from ParseTab import ParseTab
 
 class ScrapeStatements():
 
+    def scrapeCSVdata(self, filepath: str = "bank_statements/*.csv") -> list[dict]:
+        pass
+
     def scrapeExpenses(self, scrape_from_date = None, scrape_to_date = None) -> list:
 
         # Which Months need scraping? (either need to store last scraped pdf file, or detect from google sheet which was the last scraped day) 
@@ -96,6 +99,8 @@ class ScrapeStatements():
             statement_data += table_data
         
         return statement_data
+
+
 
 if __name__ == "__main__":
     scraper = ScrapeStatements()

@@ -19,3 +19,7 @@ google_income_worksheet_name = os.getenv("google_income_worksheet_name")
 google_account_creds_location = os.getenv("google_account_creds_location")
 google_income_page_1_name = os.getenv("google_income_page_1_name")
 google_income_page_2_name = os.getenv("google_income_page_2_name")
+
+google_budget_worksheet_name= os.getenv("google_budget_worksheet_name")
+google_budget_expense_page_name = os.getenv("google_budget_expense_page_name")
+google_budget_monthly_evaluation_page_name = os.getenv("google_budget_monthly_evaluation_page_name")
