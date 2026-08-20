@@ -26,36 +26,36 @@ def main() -> None:
     root.mainloop()
 
 def updateRota() -> None:
-    scrapeRotaDetails.main()
+    print("Outdated function, website has changed)")
+    #scrapeRotaDetails.main()
 
 def updatePayslips() -> None:
-    data = scrapeRotaDetails.findAndScrapePayslipData()
+    print("Outdated function, website has changed)")
+    # data = scrapeRotaDetails.findAndScrapePayslipData()
     
-    if not data:
-        print("No payslip data found")
-        return
+    # if not data:
+    #     print("No payslip data found")
+    #     return
 
-    this_month = datetime.date.today().replace(day=1)
-    last_month = this_month - relativedelta(months=1)
-    next_month = this_month + relativedelta(months=1)
+    # this_month = datetime.date.today().replace(day=1)
+    # last_month = this_month - relativedelta(months=1)
+    # next_month = this_month + relativedelta(months=1)
 
-    try:
-        payslip_utils = googleSheet.PaySlipSheetUtils()
-        payslip_utils.updatePayExpectations(data['this_month'], this_month)
-        payslip_utils.updatePayExpectations(data['last_month'], last_month)
-        payslip_utils.updatePayExpectations(data['next_month'], next_month)
-        print("Payslip data has been updated.")
-    except Exception as e: 
-        print(f"Error updating payslip data: {e}")
-        return
+    # try:
+    #     payslip_utils = googleSheet.PaySlipSheetUtils()
+    #     payslip_utils.updatePayExpectations(data['this_month'], this_month)
+    #     payslip_utils.updatePayExpectations(data['last_month'], last_month)
+    #     payslip_utils.updatePayExpectations(data['next_month'], next_month)
+    #     print("Payslip data has been updated.")
+    # except Exception as e: 
+    #     print(f"Error updating payslip data: {e}")
+    #     return
     
-    print("Payslip data has been updated.")
+    # print("Payslip data has been updated.")
 
 def updateExpenses() -> None:
-    # 1. select file to scrape, 
-    # 2. if csv or pdf, scrape differnently.
-    # 3. check sheet for duplicated transactions
-    # 4. update google sheet
+    # TODO: check sheet for duplicated transactions
+    
     budget = googleSheet.BudgetingSheetUtils()
 
     Tk().withdraw()
@@ -63,14 +63,14 @@ def updateExpenses() -> None:
     filetype = filepath.split(".")[-1]
 
     if filetype == "csv":
-        data = budget.readAndFormatCSVFile(filepath)
-        rows = budget.formatCSVDataForSpreadsheet(data)
+        data = budget.getCSVData(filepath)
+        PreparedRowsForSpreadsheet = budget.formatCSVDataForSpreadsheet(data)
         
     elif filetype == "pdf":
         scrape_utils = ScrapeStatements()
-        rows = scrape_utils.scrapeExpenses(filepath)
+        PreparedRowsForSpreadsheet = scrape_utils.scrapeExpenses(filepath)
 
-    budget.insertTransactions(rows)
+    budget.insertTransactions(PreparedRowsForSpreadsheet)
 
 def checkMonthlyRoutines():
     """I want these routines to check that my regualr monthly bills have 1. been processed, 2 are the right amount."""
@@ -82,8 +82,6 @@ def checkMonthlyRoutines():
     # mortgage
     pass
 
-def searchJobBoards():
-    pass
 
 if __name__ == "__main__":
     main()

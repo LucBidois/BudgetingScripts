@@ -268,17 +268,16 @@ class BudgetingSheetUtils():
         worksheet_class = self.spreadsheet.worksheet(page_name)
         return self.g_utils.readWorksheet(worksheet_class, range), worksheet_class
     
-    def readAndFormatCSVFile(self, file_path: str) -> dict:
+    def getCSVData(self, file_path: str) -> list[dict]:
         with open(file_path, 'r') as file:
             lines = file.readlines()
-            # formatted_data = [line.strip().split(',') for line in lines]
 
             titles = ["Transaction Date","Transaction Type","Sort Code","Account Number","Transaction Description","Debit Amount","Credit Amount","Balance"]
-            formatted_data = []
+            data = []
             for line in lines[1:]:
-                formatted_data.append({titles[i]: line.strip().split(',')[i] for i in range(len(titles))})
+                data.append({titles[i]: line.strip().split(',')[i] for i in range(len(titles))})
          
-            return formatted_data
+            return data
 
     def formatCSVDataForSpreadsheet(self, data: list[dict]) -> list[list]:
         formatted_data = []
@@ -287,23 +286,23 @@ class BudgetingSheetUtils():
             description = row["Transaction Description"]
             outflow = row["Debit Amount"]
             inflow = row["Credit Amount"]
-            formatted_data.append(self.TransactionTrackingRowValues(date, description, outflow, inflow))
+            formatted_data.append(self.setFormatForTransactionTrackingPage(date, description, outflow, inflow))
         return formatted_data
-
-    def TransactionTrackingRowValues(self, date: str, description:str, outflow: float, inflow: float) -> list: # TODO: I hate this function name, 
+    
+    def setFormatForTransactionTrackingPage(self, date: str, description:str, outflow: float, inflow: float) -> list:
         
         shopping, transport, presentOrClothes, fixedMonthly, yearly, unbudgeted = self.pickOutflowCategory(outflow, description)
 
         return [
-            f"{date}",# Date
-            f"{description.lower()}",# Shop	
-            "",#f"=SUM(D{row_num}:J{row_num})",# Unallocated Total	# NOTE: I could deal with this function after I have all the data. or I could ignore it, or add it manually since it's just the sum of the row.
-            f"{shopping}",# Shopping	
-            f"{transport}",# Transport	
-            f"{presentOrClothes}",# Presents/clothes	
-            f"{fixedMonthly}",# Fixed Monthly	
-            f"{yearly}",# Wedding	Yearly	
-            f"{unbudgeted}",# Unbudgeted	
+            f"{date}",                     # Date
+            f"{description.lower()}",      # Shop	
+            "",                            # Unallocated Total
+            f"{shopping}",                 # Shopping	
+            f"{transport}",                # Transport	
+            f"{presentOrClothes}",         # Presents/clothes	
+            f"{fixedMonthly}",             # Fixed Monthly	
+            f"{yearly}",                   # Yearly	
+            f"{unbudgeted}",               # Unbudgeted	
             f"-{inflow}" if inflow else "" # Income	
         ]
     
@@ -342,22 +341,12 @@ class BudgetingSheetUtils():
         f""#Unbudgeted
         ]#Income
 
-    """
-    Class holding methods and attributes used in my budget spreadsheet. 
-    Child classes may include
-    - Mortgage tracker 
-    - Taxes dependent on income changes
-    - Monthly expectations of expenses
-    - Tracking expenses
-    - Using Reciepts to auto update and track expenses 
-    """
-
     def insertTransactions(self, rows: list[list]):
         worksheet = self.spreadsheet.worksheet(mySecrets.google_budget_expense_page_name)
         worksheet.insert_rows(rows, row=2, value_input_option = ValueInputOption.user_entered)
 
     def test(self) -> None:
-        data = self.readAndFormatCSVFile("bank_statements/30993668_20263722_0604.csv")
+        data = self.getCSVData("bank_statements/30993668_20263722_0604.csv")
         rows = self.formatCSVDataForSpreadsheet(data)
         self.insertTransactions(rows)
         print("success")

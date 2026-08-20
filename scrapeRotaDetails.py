@@ -175,7 +175,7 @@ def navigateToRotaPage(driver: webdriver.Chrome) -> bool:
         time.sleep(1) # wait for frame to load
         search_bar = driver.find_element(By.XPATH, XPaths.search_bar.value)
         search_bar.click()
-        search_bar.send_keys("my rota")
+        search_bar.send_keys("myrota")
         search_bar.send_keys(Keys.RETURN)
         time.sleep(5) # wait for search results to load
         driver.find_element(By.XPATH, XPaths.search_result_my_rota.value).click()
